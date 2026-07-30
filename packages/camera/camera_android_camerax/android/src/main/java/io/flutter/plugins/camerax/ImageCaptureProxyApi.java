@@ -43,6 +43,11 @@ class ImageCaptureProxyApi extends PigeonApiImageCapture {
       @Nullable CameraXFlashMode flashMode,
       @Nullable Long jpegQuality) {
     final ImageCapture.Builder builder = new ImageCapture.Builder();
+    // [Zelly patch] Zero-Shutter Lag: ring-buffers recent full-res frames so
+    // takePicture() returns the frame nearest the shutter press instead of
+    // running a fresh capture. Falls back to MINIMIZE_LATENCY automatically on
+    // unsupported devices and when flash is ON/AUTO.
+    builder.setCaptureMode(ImageCapture.CAPTURE_MODE_ZERO_SHUTTER_LAG);
     if (targetRotation != null) {
       builder.setTargetRotation(targetRotation.intValue());
     }
