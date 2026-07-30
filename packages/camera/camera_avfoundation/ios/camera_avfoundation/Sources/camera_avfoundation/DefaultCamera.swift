@@ -718,6 +718,12 @@ final class DefaultCamera: NSObject, Camera {
     if fileFormat == .heif, isHEVCCodecAvailable {
       settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.hevc])
       fileExtension = "heif"
+      // [Zelly patch] The HEIF branch replaces `settings`, so re-apply the
+      // high-res flag that was set on the discarded instance above (the JPEG
+      // branch below already does this).
+      if mediaSettings.resolutionPreset == .max {
+        settings.isHighResolutionPhotoEnabled = true
+      }
     } else {
       fileExtension = "jpg"
       if imageQuality < 100 {
@@ -732,6 +738,10 @@ final class DefaultCamera: NSObject, Camera {
         }
       }
     }
+
+    // [Zelly patch] Prioritize shot-to-shot speed over per-shot fusion
+    // processing (the default .balanced adds hundreds of ms per capture).
+    settings.photoQualityPrioritization = .speed
 
     if flashMode != .torch {
       settings.flashMode = getAVCaptureFlashMode(for: flashMode)
