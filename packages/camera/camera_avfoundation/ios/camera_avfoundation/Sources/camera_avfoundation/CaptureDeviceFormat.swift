@@ -20,6 +20,19 @@ protocol CaptureDeviceFormat: NSObjectProtocol {
 
   var formatDescription: CMFormatDescription { get }
   var flutterVideoSupportedFrameRateRanges: [FrameRateRange] { get }
+
+  // [Zelly patch] Exposed directly on the protocol (rather than requiring
+  // `.avFormat`, which test doubles can't safely implement — see
+  // MockCaptureDeviceFormat) so shutter-speed candidate format selection
+  // (`configureActiveFormatForShutterSpeed` in DefaultCamera.swift) is
+  // testable. Names match the real `AVCaptureDevice.Format` API exactly so
+  // the real-device extension below needs no extra implementation. Both are
+  // iOS 16+ APIs, hence the availability annotation (this plugin's minimum
+  // deployment target is iOS 13).
+  @available(iOS 16.0, *)
+  var isHighPhotoQualitySupported: Bool { get }
+  @available(iOS 16.0, *)
+  var supportedMaxPhotoDimensions: [CMVideoDimensions] { get }
 }
 
 extension AVFrameRateRange: FrameRateRange {}

@@ -8,90 +8,46 @@ import XCTest
 @testable import camera_avfoundation
 
 /// Includes test cases related to resolution presets setting operations for Camera class.
+///
+/// [Zelly patch] `setCaptureSessionPreset` (resolutionPreset-driven session/format
+/// configuration) is no longer used on the no-fps path — replaced by
+/// `configureActiveFormatForShutterSpeed` (D10), which always puts the video
+/// session in `.inputPriority` and selects the active format by photo-quality
+/// candidate ranking instead of by `resolutionPreset`. See
+/// docs/camera/design/shutter-latency-final.md §3-2.
 final class CameraSessionPresetsTests: XCTestCase {
-  func testResolutionPresetWithBestFormat_mustUpdateCaptureSessionPreset() {
-    let expectedPreset = AVCaptureSession.Preset.inputPriority
-    let presetExpectation = expectation(description: "Expected preset set")
-    let lockForConfigurationExpectation = expectation(
-      description: "Expected lockForConfiguration called")
+  // [Zelly patch] There is intentionally no test here for the ZSL
+  // candidate-selection/lockForConfiguration path itself:
+  // `capturePhotoOutput` is hardcoded to a real `AVCapturePhotoOutput()` in
+  // `DefaultCamera.init` (not injected via `CameraConfiguration`), so no test
+  // can substitute `MockCapturePhotoOutput` before
+  // `configureActiveFormatForShutterSpeed` runs during init. Assigning
+  // `maxPhotoDimensions` on a real, session-disconnected AVCapturePhotoOutput
+  // throws NSInvalidArgumentException in this harness. Making that path
+  // testable would require adding a `capturePhotoOutputFactory` hook to
+  // `CameraConfiguration`, which is out of scope here.
+  func testConfigureActiveFormatForShutterSpeed_alwaysSetsInputPriorityRegardlessOfPreset() {
+    for preset: PlatformResolutionPreset in [.max, .ultraHigh, .medium] {
+      let expectation = self.expectation(
+        description: "Expected .inputPriority preset set for \(preset)")
 
-    let videoSessionMock = MockCaptureSession()
-    videoSessionMock.canSetSessionPresetStub = { _ in true }
-    videoSessionMock.setSessionPresetStub = { preset in
-      if preset == expectedPreset {
-        presetExpectation.fulfill()
+      let videoSessionMock = MockCaptureSession()
+      videoSessionMock.canSetSessionPresetStub = { _ in true }
+      videoSessionMock.setSessionPresetStub = { sessionPreset in
+        if sessionPreset == .inputPriority {
+          expectation.fulfill()
+        }
       }
+
+      let configuration = CameraTestUtils.createTestCameraConfiguration()
+      configuration.videoCaptureSession = videoSessionMock
+      configuration.mediaSettings = CameraTestUtils.createDefaultMediaSettings(
+        resolutionPreset: preset)
+      configuration.videoCaptureDeviceFactory = { _ in MockCaptureDevice() }
+
+      let _ = CameraTestUtils.createTestCamera(configuration)
+
+      waitForExpectations(timeout: 30, handler: nil)
     }
-    let captureFormatMock = MockCaptureDeviceFormat()
-    let captureDeviceMock = MockCaptureDevice()
-    captureDeviceMock.flutterFormats = [captureFormatMock]
-    var currentFormat: CaptureDeviceFormat = captureFormatMock
-    captureDeviceMock.activeFormatStub = {
-      return currentFormat
-    }
-    captureDeviceMock.lockForConfigurationStub = {
-      lockForConfigurationExpectation.fulfill()
-    }
-
-    let configuration = CameraTestUtils.createTestCameraConfiguration()
-    configuration.videoCaptureDeviceFactory = { _ in captureDeviceMock }
-    configuration.videoDimensionsConverter = { _ in
-      return CMVideoDimensions(width: 4, height: 3)
-    }
-    configuration.videoCaptureSession = videoSessionMock
-    configuration.mediaSettings = CameraTestUtils.createDefaultMediaSettings(
-      resolutionPreset: PlatformResolutionPreset.max)
-
-    let _ = CameraTestUtils.createTestCamera(configuration)
-
-    waitForExpectations(timeout: 30, handler: nil)
-  }
-
-  func testResolutionPresetWithCanSetSessionPresetMax_mustUpdateCaptureSessionPreset() {
-    let expectedPreset = AVCaptureSession.Preset.hd4K3840x2160
-    let expectation = self.expectation(description: "Expected preset set")
-
-    let videoSessionMock = MockCaptureSession()
-    // Make sure that setting resolution preset for session always succeeds.
-    videoSessionMock.canSetSessionPresetStub = { _ in true }
-    videoSessionMock.setSessionPresetStub = { preset in
-      if preset == expectedPreset {
-        expectation.fulfill()
-      }
-    }
-
-    let configuration = CameraTestUtils.createTestCameraConfiguration()
-    configuration.videoCaptureSession = videoSessionMock
-    configuration.mediaSettings = CameraTestUtils.createDefaultMediaSettings(
-      resolutionPreset: PlatformResolutionPreset.max)
-    configuration.videoCaptureDeviceFactory = { _ in MockCaptureDevice() }
-
-    let _ = CameraTestUtils.createTestCamera(configuration)
-
-    waitForExpectations(timeout: 30, handler: nil)
-  }
-
-  func testResolutionPresetWithCanSetSessionPresetUltraHigh_mustUpdateCaptureSessionPreset() {
-    let expectedPreset = AVCaptureSession.Preset.hd4K3840x2160
-    let expectation = self.expectation(description: "Expected preset set")
-
-    let videoSessionMock = MockCaptureSession()
-    // Make sure that setting resolution preset for session always succeeds.
-    videoSessionMock.canSetSessionPresetStub = { _ in true }
-    // Expect that setting "ultraHigh" resolutionPreset correctly updates videoCaptureSession.
-    videoSessionMock.setSessionPresetStub = { preset in
-      if preset == expectedPreset {
-        expectation.fulfill()
-      }
-    }
-
-    let configuration = CameraTestUtils.createTestCameraConfiguration()
-    configuration.videoCaptureSession = videoSessionMock
-    configuration.mediaSettings = CameraTestUtils.createDefaultMediaSettings(
-      resolutionPreset: PlatformResolutionPreset.ultraHigh)
-
-    let _ = CameraTestUtils.createTestCamera(configuration)
-
-    waitForExpectations(timeout: 30, handler: nil)
   }
 }

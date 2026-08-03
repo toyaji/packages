@@ -61,6 +61,29 @@ protocol CapturePhotoOutput: CaptureOutput {
 
   /// Corresponds to the `capturePhotoWithSettings` method of `AVCapturePhotoOutput`
   func capturePhoto(with settings: AVCapturePhotoSettings, delegate: AVCapturePhotoCaptureDelegate)
+
+  // [Zelly patch] Exposed on the protocol (rather than requiring `.avOutput`)
+  // so `configureActiveFormatForShutterSpeed`/`captureToFile` in
+  // DefaultCamera.swift are testable. `maxPhotoDimensions` in particular
+  // throws NSInvalidArgumentException on a real AVCapturePhotoOutput unless
+  // it's connected to a video source device with a non-nil activeFormat —
+  // exactly the state a test double is in. Names match the real
+  // `AVCapturePhotoOutput` API exactly so the real-device extension below
+  // needs no extra implementation.
+  @available(iOS 16.0, *)
+  var maxPhotoDimensions: CMVideoDimensions { get set }
+  @available(iOS 17.0, *)
+  var isZeroShutterLagSupported: Bool { get }
+  @available(iOS 17.0, *)
+  var isZeroShutterLagEnabled: Bool { get set }
+  @available(iOS 17.0, *)
+  var isResponsiveCaptureSupported: Bool { get }
+  @available(iOS 17.0, *)
+  var isResponsiveCaptureEnabled: Bool { get set }
+  @available(iOS 17.0, *)
+  var isFastCapturePrioritizationSupported: Bool { get }
+  @available(iOS 17.0, *)
+  var isFastCapturePrioritizationEnabled: Bool { get set }
 }
 
 /// Make AVCapturePhotoOutput conform to FLTCapturePhotoOutput protocol directly

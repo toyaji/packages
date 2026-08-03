@@ -25,6 +25,23 @@ final class MockCaptureDeviceFormat: NSObject, CaptureDeviceFormat {
   /// The array of frame rate ranges supported by the video format.
   var flutterVideoSupportedFrameRateRanges: [FrameRateRange] = []
 
+  // [Zelly patch] Default to false/empty so formats are excluded from
+  // shutter-speed candidate selection (`configureActiveFormatForShutterSpeed`
+  // in DefaultCamera.swift) unless a test explicitly opts a format in.
+  @available(iOS 16.0, *)
+  var isHighPhotoQualitySupported: Bool {
+    get { _isHighPhotoQualitySupported }
+    set { _isHighPhotoQualitySupported = newValue }
+  }
+  private var _isHighPhotoQualitySupported = false
+
+  @available(iOS 16.0, *)
+  var supportedMaxPhotoDimensions: [CMVideoDimensions] {
+    get { _supportedMaxPhotoDimensions }
+    set { _supportedMaxPhotoDimensions = newValue }
+  }
+  private var _supportedMaxPhotoDimensions: [CMVideoDimensions] = []
+
   override init() {
     super.init()
 

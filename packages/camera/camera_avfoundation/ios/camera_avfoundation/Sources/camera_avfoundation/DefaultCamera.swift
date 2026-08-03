@@ -179,7 +179,9 @@ final class DefaultCamera: NSObject, Camera {
     flashMode = captureDevice.hasFlash ? .auto : .off
 
     capturePhotoOutput = AVCapturePhotoOutput()
-    capturePhotoOutput.isHighResolutionCaptureEnabled = true
+    // [Zelly patch] `isHighResolutionCaptureEnabled` is iOS 16-deprecated;
+    // `maxPhotoDimensions` (set in `configureActiveFormatForShutterSpeed` and
+    // per-shot in `captureToFile`) is what governs stills resolution now.
 
     videoCaptureSession.automaticallyConfiguresApplicationAudioSession = false
     audioCaptureSession.automaticallyConfiguresApplicationAudioSession = false
@@ -228,9 +230,12 @@ final class DefaultCamera: NSObject, Camera {
         mediaSettingsAVWrapper.setMaxFrameDuration(duration, on: captureDevice)
       }
     } else {
-      // If the frame rate is not important fall to a less restrictive
-      // behavior (no configuration locking).
-      try setCaptureSessionPreset(mediaSettings.resolutionPreset)
+      // [Zelly patch] `framesPerSecond` isn't set on Zelly's capture path, so
+      // this is the branch that actually runs. Replaces the old
+      // sessionPreset-based configuration (D10) with direct activeFormat
+      // selection + ZSL/Responsive/Fast Capture Prioritization (D11).
+      // See docs/camera/design/shutter-latency-final.md §3-2.
+      try configureActiveFormatForShutterSpeed()
     }
 
     updateOrientation()
@@ -328,6 +333,132 @@ final class DefaultCamera: NSObject, Camera {
           userInfo: [
             NSLocalizedDescriptionKey: "No capture session available for current capture session."
           ])
+      }
+    }
+
+    let size = videoDimensionsConverter(captureDevice.flutterActiveFormat)
+    previewSize = CGSize(width: CGFloat(size.width), height: CGFloat(size.height))
+    audioCaptureSession.sessionPreset = videoCaptureSession.sessionPreset
+  }
+
+  /// [Zelly patch] Selects the fastest-capable format for stills and enables
+  /// Zero-Shutter Lag + Responsive Capture + Fast Capture Prioritization,
+  /// replacing the old sessionPreset-based configuration (D10/D11). See
+  /// docs/camera/design/shutter-latency-final.md §3-2 for the full rationale.
+  ///
+  /// Candidates are `AVCaptureDevice.Format`s that support high photo
+  /// quality, ranked by photo resolution (descending) then video pixel count
+  /// (ascending, to keep preview/recording frame cost down). The 24MP
+  /// (5712x4284) maximum is excluded — real-device testing showed it's a
+  /// non-binned outlier not worth the fusion/processing overhead for an
+  /// album app (I사실29).
+  private func configureActiveFormatForShutterSpeed() throws {
+    // [Zelly patch] `isHighPhotoQualitySupported`/`supportedMaxPhotoDimensions`/
+    // `maxPhotoDimensions` are iOS 16+ APIs (this plugin's minimum deployment
+    // target is iOS 13) — fall back to the legacy sessionPreset-based
+    // configuration entirely below that.
+    guard #available(iOS 16.0, *) else {
+      try setCaptureSessionPreset(mediaSettings.resolutionPreset)
+      return
+    }
+
+    videoCaptureSession.sessionPreset = .inputPriority
+
+    let maxVideoWidth: Int32 = 1920
+    let excludedPhotoDimensions = CMVideoDimensions(width: 5712, height: 4284)
+
+    func rankedCandidates(enforceVideoWidthLimit: Bool) -> [(
+      format: CaptureDeviceFormat, photoDimensions: CMVideoDimensions
+    )] {
+      let candidates = captureDevice.flutterFormats.compactMap {
+        format -> (CaptureDeviceFormat, CMVideoDimensions)? in
+        // [Zelly patch] Read via the `CaptureDeviceFormat` protocol, not
+        // `.avFormat` — the latter is unimplementable in test doubles since
+        // `AVCaptureDevice.Format` has no public initializer (see
+        // MockCaptureDeviceFormat).
+        guard format.isHighPhotoQualitySupported else { return nil }
+        if enforceVideoWidthLimit && videoDimensionsConverter(format).width > maxVideoWidth {
+          return nil
+        }
+        let photoDimensions = format.supportedMaxPhotoDimensions
+          .filter {
+            !($0.width == excludedPhotoDimensions.width
+              && $0.height == excludedPhotoDimensions.height)
+          }
+          .max { Int64($0.width) * Int64($0.height) < Int64($1.width) * Int64($1.height) }
+        guard let photoDimensions else { return nil }
+        return (format, photoDimensions)
+      }
+      return candidates.sorted { lhs, rhs in
+        let lhsPhotoPixels = Int64(lhs.1.width) * Int64(lhs.1.height)
+        let rhsPhotoPixels = Int64(rhs.1.width) * Int64(rhs.1.height)
+        if lhsPhotoPixels != rhsPhotoPixels { return lhsPhotoPixels > rhsPhotoPixels }
+        let lhsVideoPixels = videoDimensionsConverter(lhs.0)
+        let rhsVideoPixels = videoDimensionsConverter(rhs.0)
+        return Int64(lhsVideoPixels.width) * Int64(lhsVideoPixels.height)
+          < Int64(rhsVideoPixels.width) * Int64(rhsVideoPixels.height)
+      }
+    }
+
+    var candidates = rankedCandidates(enforceVideoWidthLimit: true)
+    if candidates.isEmpty {
+      NSLog(
+        "[ZellyShutter] No format with video width <= \(maxVideoWidth) supports high photo "
+          + "quality; retrying without the width limit.")
+      candidates = rankedCandidates(enforceVideoWidthLimit: false)
+    }
+
+    guard !candidates.isEmpty else {
+      NSLog("[ZellyShutter] No candidate format found; leaving default activeFormat untouched.")
+      let size = videoDimensionsConverter(captureDevice.flutterActiveFormat)
+      previewSize = CGSize(width: CGFloat(size.width), height: CGFloat(size.height))
+      audioCaptureSession.sessionPreset = videoCaptureSession.sessionPreset
+      return
+    }
+
+    var zslApplied = false
+    var lastAppliedCandidate: (format: CaptureDeviceFormat, photoDimensions: CMVideoDimensions)?
+    for candidate in candidates.prefix(3) {
+      do {
+        try captureDevice.lockForConfiguration()
+      } catch {
+        continue
+      }
+      captureDevice.flutterActiveFormat = candidate.format
+      capturePhotoOutput.maxPhotoDimensions = candidate.photoDimensions
+      captureDevice.unlockForConfiguration()
+      lastAppliedCandidate = candidate
+
+      if #available(iOS 17.0, *), capturePhotoOutput.isZeroShutterLagSupported {
+        capturePhotoOutput.isZeroShutterLagEnabled = true
+        if capturePhotoOutput.isResponsiveCaptureSupported {
+          capturePhotoOutput.isResponsiveCaptureEnabled = true
+        }
+        if capturePhotoOutput.isFastCapturePrioritizationSupported {
+          capturePhotoOutput.isFastCapturePrioritizationEnabled = true
+        }
+        zslApplied = true
+        break
+      }
+    }
+
+    if !zslApplied, let bestCandidate = candidates.first,
+      lastAppliedCandidate?.format !== bestCandidate.format
+    {
+      // [Zelly patch] iOS < 17, or none of the top 3 candidates support ZSL
+      // (§5 I-1/I-2) — silently fall back to the highest-resolution
+      // candidate for format/maxPhotoDimensions only. Speed doesn't improve,
+      // but resolution still does. Skipped when the loop above already ended
+      // on this exact candidate (e.g. there was only one to begin with), to
+      // avoid a redundant lockForConfiguration cycle.
+      do {
+        try captureDevice.lockForConfiguration()
+        captureDevice.flutterActiveFormat = bestCandidate.format
+        capturePhotoOutput.maxPhotoDimensions = bestCandidate.photoDimensions
+        captureDevice.unlockForConfiguration()
+      } catch {
+        // Leave whatever the last attempted candidate configured above;
+        // capture still works, just without the resolution/ZSL upgrade.
       }
     }
 
@@ -706,10 +837,6 @@ final class DefaultCamera: NSObject, Camera {
   func captureToFile(completion: @escaping (Result<String, any Error>) -> Void) {
     var settings = AVCapturePhotoSettings()
 
-    if mediaSettings.resolutionPreset == .max {
-      settings.isHighResolutionPhotoEnabled = true
-    }
-
     let fileExtension: String
 
     let isHEVCCodecAvailable = capturePhotoOutput.availablePhotoCodecTypes.contains(
@@ -718,12 +845,6 @@ final class DefaultCamera: NSObject, Camera {
     if fileFormat == .heif, isHEVCCodecAvailable {
       settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.hevc])
       fileExtension = "heif"
-      // [Zelly patch] The HEIF branch replaces `settings`, so re-apply the
-      // high-res flag that was set on the discarded instance above (the JPEG
-      // branch below already does this).
-      if mediaSettings.resolutionPreset == .max {
-        settings.isHighResolutionPhotoEnabled = true
-      }
     } else {
       fileExtension = "jpg"
       if imageQuality < 100 {
@@ -733,19 +854,28 @@ final class DefaultCamera: NSObject, Camera {
             AVVideoQualityKey: CGFloat(imageQuality) / 100.0
           ],
         ])
-        if mediaSettings.resolutionPreset == .max {
-          settings.isHighResolutionPhotoEnabled = true
-        }
       }
     }
 
-    // [Zelly patch] Prioritize shot-to-shot speed over per-shot fusion
-    // processing (the default .balanced adds hundreds of ms per capture).
-    settings.photoQualityPrioritization = .speed
-
-    if flashMode != .torch {
-      settings.flashMode = getAVCaptureFlashMode(for: flashMode)
+    // [Zelly patch] `isHighResolutionPhotoEnabled` is iOS 16-deprecated;
+    // `maxPhotoDimensions` (set on both the output and per-shot settings, see
+    // below) is what actually governs stills resolution now. Its default is
+    // the *minimum* of `supportedMaxPhotoDimensions` — omitting this line is
+    // the easiest way to silently regress to tiny photos.
+    if #available(iOS 16.0, *) {
+      settings.maxPhotoDimensions = capturePhotoOutput.maxPhotoDimensions
+    } else if mediaSettings.resolutionPreset == .max {
+      settings.isHighResolutionPhotoEnabled = true
     }
+
+    // [Zelly patch] `.balanced` is required for the ZSL speed win — `.speed`
+    // is outside its documented effect and was a wrong value in an earlier
+    // draft of this patch. See docs/camera/design/shutter-latency-final.md D14.
+    settings.photoQualityPrioritization = .balanced
+
+    // [Zelly patch] Flash is permanently OFF in photo mode (D9) — ON/AUTO
+    // disable ZSL, and the flash toggle UI is being removed app-side.
+    settings.flashMode = .off
 
     let path: String
     do {
