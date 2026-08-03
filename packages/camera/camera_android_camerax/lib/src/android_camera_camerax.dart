@@ -128,9 +128,6 @@ class AndroidCameraCameraX extends CameraPlatform {
   @visibleForTesting
   ImageCapture? imageCapture;
 
-  /// The flash mode currently configured for [imageCapture].
-  CameraXFlashMode? _currentFlashMode;
-
   /// Whether or not torch flash mode has been enabled for the [camera].
   @visibleForTesting
   bool torchEnabled = false;
@@ -410,8 +407,18 @@ class AndroidCameraCameraX extends CameraPlatform {
     _flutterSurfaceTextureId = await preview!.setSurfaceProvider(systemServicesManager);
 
     // Configure ImageCapture instance.
+    // [Zelly patch] ImageCapture gets its own ResolutionSelector, decoupled
+    // from Preview/ImageAnalysis's preset. HIGHEST_AVAILABLE_STRATEGY alone
+    // (no aspect ratio / resolution filter / allowedResolutionMode) is
+    // required to keep ZSL eligible while restoring full sensor resolution
+    // for stills (docs/camera/design/shutter-latency-final.md D6).
     imageCapture = ImageCapture(
-      resolutionSelector: _presetResolutionSelector,
+      resolutionSelector: ResolutionSelector(
+        resolutionStrategy: ResolutionStrategy.highestAvailableStrategy,
+      ),
+      // [Zelly patch] Flash is permanently off in photo mode (D9) — ON/AUTO
+      // disable ZSL. Fixed at construction instead of toggled at capture time.
+      flashMode: CameraXFlashMode.off,
       /* use CameraX default target rotation */ targetRotation: await deviceOrientationManager
           .getDefaultDisplayRotation(),
     );
@@ -474,10 +481,14 @@ class AndroidCameraCameraX extends CameraPlatform {
     // Bind configured UseCases to ProcessCameraProvider instance & mark Preview
     // instance as bound but not paused. Video capture is bound at first use
     // instead of here.
+    // [Zelly patch] ImageAnalysis is intentionally NOT bound here in photo
+    // mode (D8) — the app doesn't consume the frame stream, and an unused
+    // bound ImageAnalysis adds stream-combination pressure against ZSL's
+    // PRIVATE reprocessing surface. It's lazily bound in
+    // `_configureImageAnalysis` only when `startImageStream` is used.
     camera = await processCameraProvider!.bindToLifecycle(cameraSelector!, <UseCase>[
       preview!,
       imageCapture!,
-      imageAnalysis!,
     ]);
     await _updateCameraInfoAndLiveCameraState(_flutterSurfaceTextureId);
     previewInitiallyBound = true;
@@ -1018,14 +1029,9 @@ class AndroidCameraCameraX extends CameraPlatform {
   @override
   Future<XFile> takePicture(int cameraId) async {
     await _bindUseCaseToLifecycle(imageCapture!, cameraId);
-    // Set flash mode.
-    if (_currentFlashMode != null) {
-      await imageCapture!.setFlashMode(_currentFlashMode!);
-    } else if (torchEnabled) {
-      // Ensure any previously set flash modes are unset when torch mode has
-      // been enabled.
-      await imageCapture!.setFlashMode(CameraXFlashMode.off);
-    }
+    // [Zelly patch] No per-capture setFlashMode round-trip (was costing
+    // ~260ms/shot) — flash is permanently OFF, fixed at ImageCapture
+    // construction (D9). See docs/camera/design/shutter-latency-final.md §3-1.
 
     // Set target rotation to the current default CameraX rotation if
     // the capture orientation is not locked.
@@ -1053,29 +1059,25 @@ class AndroidCameraCameraX extends CameraPlatform {
   /// respectively.
   @override
   Future<void> setFlashMode(int cameraId, FlashMode mode) async {
-    // Turn off torch mode if it is enabled and not being redundantly set.
-    if (mode != FlashMode.torch && torchEnabled) {
-      await _enableTorchMode(false);
-      torchEnabled = false;
+    // [Zelly patch] Photo-capture flash is permanently OFF at construction
+    // (D9) — [imageCapture]'s flash mode is no longer synced here. Torch
+    // (continuous video light) is unrelated to capture flash and still
+    // toggled as before.
+    if (mode != FlashMode.torch) {
+      if (torchEnabled) {
+        await _enableTorchMode(false);
+        torchEnabled = false;
+      }
+      return;
     }
 
-    switch (mode) {
-      case FlashMode.off:
-        _currentFlashMode = CameraXFlashMode.off;
-      case FlashMode.auto:
-        _currentFlashMode = CameraXFlashMode.auto;
-      case FlashMode.always:
-        _currentFlashMode = CameraXFlashMode.on;
-      case FlashMode.torch:
-        _currentFlashMode = null;
-        if (torchEnabled) {
-          // Torch mode enabled already.
-          return;
-        }
-
-        await _enableTorchMode(true);
-        torchEnabled = true;
+    if (torchEnabled) {
+      // Torch mode enabled already.
+      return;
     }
+
+    await _enableTorchMode(true);
+    torchEnabled = true;
   }
 
   /// Sets the JPEG compression quality for still image capture.

@@ -4,6 +4,8 @@
 
 package io.flutter.plugins.camerax;
 
+import android.os.Build;
+import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.camera.core.Camera;
 import androidx.camera.core.CameraInfo;
@@ -15,6 +17,7 @@ import androidx.lifecycle.LifecycleOwner;
 import com.google.common.util.concurrent.ListenableFuture;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import kotlin.Result;
 import kotlin.Unit;
 import kotlin.jvm.functions.Function1;
@@ -25,6 +28,10 @@ import kotlin.jvm.functions.Function1;
  * associated native class or an instance of that class.
  */
 class ProcessCameraProviderProxyApi extends PigeonApiProcessCameraProvider {
+  // [Zelly patch] One-shot diagnostic so ZSL support can be confirmed from
+  // logcat on real devices without instrumenting the Dart layer.
+  private static final AtomicBoolean zslDiagnosticLogged = new AtomicBoolean(false);
+
   ProcessCameraProviderProxyApi(@NonNull ProxyApiRegistrar pigeonRegistrar) {
     super(pigeonRegistrar);
   }
@@ -67,8 +74,18 @@ class ProcessCameraProviderProxyApi extends PigeonApiProcessCameraProvider {
       @NonNull List<? extends UseCase> useCases) {
     final LifecycleOwner lifecycleOwner = getPigeonRegistrar().getLifecycleOwner();
     if (lifecycleOwner != null) {
-      return pigeonInstance.bindToLifecycle(
-          lifecycleOwner, cameraSelector, useCases.toArray(new UseCase[0]));
+      final Camera camera =
+          pigeonInstance.bindToLifecycle(
+              lifecycleOwner, cameraSelector, useCases.toArray(new UseCase[0]));
+      if (zslDiagnosticLogged.compareAndSet(false, true)) {
+        Log.i(
+            "ZellyShutter",
+            "isZslSupported="
+                + camera.getCameraInfo().isZslSupported()
+                + " model="
+                + Build.MODEL);
+      }
+      return camera;
     }
 
     throw new IllegalStateException(

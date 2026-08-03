@@ -4,6 +4,7 @@
 
 package io.flutter.plugins.camerax;
 
+import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.camera.core.ImageCapture;
@@ -11,6 +12,7 @@ import androidx.camera.core.ImageCaptureException;
 import androidx.camera.core.resolutionselector.ResolutionSelector;
 import java.io.File;
 import java.io.IOException;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import kotlin.Result;
 import kotlin.Unit;
@@ -24,6 +26,10 @@ import kotlin.jvm.functions.Function1;
 class ImageCaptureProxyApi extends PigeonApiImageCapture {
   static final String TEMPORARY_FILE_NAME = "CAP";
   static final String JPG_FILE_TYPE = ".jpg";
+
+  // [Zelly patch] Single reused executor for takePicture() callbacks instead of
+  // spawning (and leaking) a new single-thread executor on every capture.
+  private final ExecutorService takePictureExecutor = Executors.newSingleThreadExecutor();
 
   ImageCaptureProxyApi(@NonNull ProxyApiRegistrar pigeonRegistrar) {
     super(pigeonRegistrar);
@@ -110,8 +116,7 @@ class ImageCaptureProxyApi extends PigeonApiImageCapture {
     final ImageCapture.OnImageSavedCallback onImageSavedCallback =
         createOnImageSavedCallback(temporaryCaptureFile, systemServicesManager, callback);
 
-    pigeonInstance.takePicture(
-        outputFileOptions, Executors.newSingleThreadExecutor(), onImageSavedCallback);
+    pigeonInstance.takePicture(outputFileOptions, takePictureExecutor, onImageSavedCallback);
   }
 
   @Override

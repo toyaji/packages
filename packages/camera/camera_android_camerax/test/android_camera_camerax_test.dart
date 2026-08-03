@@ -66,6 +66,20 @@ void main() {
   setUp(() {
     PigeonOverrides.pigeon_reset();
     GenericsPigeonOverrides.reset();
+    // [Zelly patch] D6: ImageCapture's ResolutionSelector now always calls
+    // ResolutionStrategy.highestAvailableStrategy and constructs a new
+    // ResolutionSelector, so every test that constructs a camera needs these
+    // mocked by default, even tests that don't otherwise configure use-case
+    // resolution selectors.
+    PigeonOverrides.resolutionStrategy_highestAvailableStrategy = MockResolutionStrategy();
+    PigeonOverrides.resolutionSelector_new =
+        ({
+          AspectRatioStrategy? aspectRatioStrategy,
+          ResolutionStrategy? resolutionStrategy,
+          ResolutionFilter? resolutionFilter,
+        }) {
+          return MockResolutionSelector();
+        };
   });
 
   /// Helper method for testing sending/receiving CameraErrorEvents.
@@ -627,7 +641,6 @@ void main() {
         mockProcessCameraProvider.bindToLifecycle(mockBackCameraSelector, <UseCase>[
           mockPreview,
           mockImageCapture,
-          mockImageAnalysis,
         ]),
       ).thenAnswer((_) async => mockCamera);
       when(mockCamera.getCameraInfo()).thenAnswer((_) async => mockCameraInfo);
@@ -736,18 +749,6 @@ void main() {
           ResolutionStrategyFallbackRule.closestLowerThenHigher,
         );
 
-        final CameraSize? imageCaptureSize = await camera
-            .imageCapture!
-            .resolutionSelector!
-            .resolutionStrategy!
-            .getBoundSize();
-        expect(imageCaptureSize?.width, equals(expectedBoundSize.width));
-        expect(imageCaptureSize?.height, equals(expectedBoundSize.height));
-        expect(
-          await camera.imageCapture!.resolutionSelector!.resolutionStrategy!.getFallbackRule(),
-          ResolutionStrategyFallbackRule.closestLowerThenHigher,
-        );
-
         final CameraSize? imageAnalysisSize = await camera
             .imageAnalysis!
             .resolutionSelector!
@@ -758,6 +759,15 @@ void main() {
         expect(
           await camera.imageAnalysis!.resolutionSelector!.resolutionStrategy!.getFallbackRule(),
           ResolutionStrategyFallbackRule.closestLowerThenHigher,
+        );
+
+        // [Zelly patch] D6: ImageCapture's ResolutionSelector is decoupled
+        // from the shared preset and always resolves to
+        // HIGHEST_AVAILABLE_STRATEGY, regardless of what Preview/ImageAnalysis
+        // use for this preset. See docs/camera/design/shutter-latency-final.md.
+        expect(
+          camera.imageCapture!.resolutionSelector!.resolutionStrategy,
+          equals(ResolutionStrategy.highestAvailableStrategy),
         );
       }
 
@@ -782,8 +792,14 @@ void main() {
       await camera.initializeCamera(flutterSurfaceTextureId);
 
       expect(camera.preview!.resolutionSelector, isNull);
-      expect(camera.imageCapture!.resolutionSelector, isNull);
       expect(camera.imageAnalysis!.resolutionSelector, isNull);
+      // [Zelly patch] D6: unlike Preview/ImageAnalysis, ImageCapture never
+      // falls back to a null (CameraX-default) selector — it is always
+      // pinned to HIGHEST_AVAILABLE_STRATEGY.
+      expect(
+        camera.imageCapture!.resolutionSelector!.resolutionStrategy,
+        equals(ResolutionStrategy.highestAvailableStrategy),
+      );
     },
   );
 
@@ -848,23 +864,22 @@ void main() {
             expectedPreferredResolution = null;
         }
 
+        // [Zelly patch] D6: ImageCapture never sets a resolutionFilter,
+        // regardless of preset (it always uses bare HIGHEST_AVAILABLE_STRATEGY).
+        expect(camera.imageCapture!.resolutionSelector!.resolutionFilter, isNull);
+        expect(
+          camera.imageCapture!.resolutionSelector!.resolutionStrategy,
+          equals(ResolutionStrategy.highestAvailableStrategy),
+        );
+
         if (expectedPreferredResolution == null) {
           expect(camera.preview!.resolutionSelector!.resolutionFilter, isNull);
-          expect(camera.imageCapture!.resolutionSelector!.resolutionFilter, isNull);
           expect(camera.imageAnalysis!.resolutionSelector!.resolutionFilter, isNull);
           continue;
         }
 
         expect(lastSetPreferredSize?.width, equals(expectedPreferredResolution.width));
         expect(lastSetPreferredSize?.height, equals(expectedPreferredResolution.height));
-
-        final CameraSize? imageCaptureSize = await camera
-            .imageCapture!
-            .resolutionSelector!
-            .resolutionStrategy!
-            .getBoundSize();
-        expect(imageCaptureSize?.width, equals(expectedPreferredResolution.width));
-        expect(imageCaptureSize?.height, equals(expectedPreferredResolution.height));
 
         final CameraSize? imageAnalysisSize = await camera
             .imageAnalysis!
@@ -880,8 +895,8 @@ void main() {
       await camera.initializeCamera(flutterSurfaceTextureId);
 
       expect(camera.preview!.resolutionSelector, isNull);
-      expect(camera.imageCapture!.resolutionSelector, isNull);
       expect(camera.imageAnalysis!.resolutionSelector, isNull);
+      expect(camera.imageCapture!.resolutionSelector!.resolutionFilter, isNull);
     },
   );
 
@@ -939,13 +954,17 @@ void main() {
           case ResolutionPreset.max:
         }
 
+        // [Zelly patch] D6: ImageCapture never sets an AspectRatioStrategy,
+        // regardless of preset, so it always resolves to the CameraX
+        // fallback (ratio_4_3FallbackAutoStrategy).
+        expect(
+          await camera.imageCapture!.resolutionSelector!.getAspectRatioStrategy(),
+          equals(AspectRatioStrategy.ratio_4_3FallbackAutoStrategy),
+        );
+
         if (expectedAspectRatio == null) {
           expect(
             await camera.preview!.resolutionSelector!.getAspectRatioStrategy(),
-            equals(AspectRatioStrategy.ratio_4_3FallbackAutoStrategy),
-          );
-          expect(
-            await camera.imageCapture!.resolutionSelector!.getAspectRatioStrategy(),
             equals(AspectRatioStrategy.ratio_4_3FallbackAutoStrategy),
           );
           expect(
@@ -957,23 +976,17 @@ void main() {
 
         final AspectRatioStrategy previewStrategy = await camera.preview!.resolutionSelector!
             .getAspectRatioStrategy();
-        final AspectRatioStrategy imageCaptureStrategy = await camera
-            .imageCapture!
-            .resolutionSelector!
-            .getAspectRatioStrategy();
         final AspectRatioStrategy imageAnalysisStrategy = await camera
-            .imageCapture!
+            .imageAnalysis!
             .resolutionSelector!
             .getAspectRatioStrategy();
 
         // Check aspect ratio.
         expect(await previewStrategy.getPreferredAspectRatio(), equals(expectedAspectRatio));
-        expect(await imageCaptureStrategy.getPreferredAspectRatio(), equals(expectedAspectRatio));
         expect(await imageAnalysisStrategy.getPreferredAspectRatio(), equals(expectedAspectRatio));
 
         // Check fallback rule.
         expect(await previewStrategy.getFallbackRule(), equals(expectedFallbackRule));
-        expect(await imageCaptureStrategy.getFallbackRule(), equals(expectedFallbackRule));
         expect(await imageAnalysisStrategy.getFallbackRule(), equals(expectedFallbackRule));
       }
 
@@ -982,13 +995,19 @@ void main() {
       await camera.initializeCamera(testCameraId);
 
       expect(camera.preview!.resolutionSelector, isNull);
-      expect(camera.imageCapture!.resolutionSelector, isNull);
       expect(camera.imageAnalysis!.resolutionSelector, isNull);
+      expect(
+        await camera.imageCapture!.resolutionSelector!.getAspectRatioStrategy(),
+        equals(AspectRatioStrategy.ratio_4_3FallbackAutoStrategy),
+      );
     },
   );
 
   test(
-    'createCamera and initializeCamera binds Preview, ImageCapture, and ImageAnalysis use cases to ProcessCameraProvider instance',
+    // [Zelly patch] D8: ImageAnalysis is intentionally NOT part of the
+    // initial bind in photo mode (it's bound lazily only for image
+    // streaming), so this no longer covers ImageAnalysis.
+    'createCamera and initializeCamera binds Preview and ImageCapture use cases to ProcessCameraProvider instance',
     () async {
       final camera = AndroidCameraCameraX();
       const CameraLensDirection testLensDirection = CameraLensDirection.back;
@@ -1132,7 +1151,6 @@ void main() {
         mockProcessCameraProvider.bindToLifecycle(mockBackCameraSelector, <UseCase>[
           mockPreview,
           mockImageCapture,
-          mockImageAnalysis,
         ]),
       ).thenAnswer((_) async => mockCamera);
       when(mockCamera.getCameraInfo()).thenAnswer((_) async => mockCameraInfo);
@@ -1159,7 +1177,6 @@ void main() {
         camera.processCameraProvider!.bindToLifecycle(camera.cameraSelector!, <UseCase>[
           mockPreview,
           mockImageCapture,
-          mockImageAnalysis,
         ]),
       );
 
@@ -1585,7 +1602,6 @@ void main() {
       mockProcessCameraProvider.bindToLifecycle(mockChosenCameraInfoCameraSelector, <UseCase>[
         mockPreview,
         mockImageCapture,
-        mockImageAnalysis,
       ]),
     ).thenAnswer((_) async => mockCamera);
     when(mockCamera.getCameraInfo()).thenAnswer((_) async => mockCameraInfo);
@@ -1885,7 +1901,6 @@ void main() {
       mockProcessCameraProvider.bindToLifecycle(mockBackCameraSelector, <UseCase>[
         mockPreview,
         mockImageCapture,
-        mockImageAnalysis,
       ]),
     ).thenAnswer((_) async => mockCamera);
     when(mockCamera.getCameraInfo()).thenAnswer((_) async => mockCameraInfo);
@@ -3438,7 +3453,14 @@ void main() {
     },
   );
 
-  test('takePicture turns non-torch flash mode off when torch mode enabled', () async {
+  // [Zelly patch] D5 regression: takePicture must never call
+  // imageCapture.setFlashMode — flash is fixed OFF at construction (D9),
+  // and the former per-capture round-trip cost ~260ms/shot. Covers what
+  // used to be two separate tests ('takePicture turns non-torch flash mode
+  // off when torch mode enabled' and 'setFlashMode configures ImageCapture
+  // with expected non-torch flash mode'), both of which asserted the
+  // now-removed round-trip.
+  test('takePicture never calls imageCapture.setFlashMode for any FlashMode', () async {
     final camera = AndroidCameraCameraX();
     final mockProcessCameraProvider = MockProcessCameraProvider();
     const cameraId = 77;
@@ -3459,57 +3481,13 @@ void main() {
 
     when(mockProcessCameraProvider.isBound(camera.imageCapture)).thenAnswer((_) async => true);
 
-    await camera.setFlashMode(cameraId, FlashMode.torch);
-    await camera.takePicture(cameraId);
-    verify(camera.imageCapture!.setFlashMode(CameraXFlashMode.off));
-  });
-
-  test('setFlashMode configures ImageCapture with expected non-torch flash mode', () async {
-    final camera = AndroidCameraCameraX();
-    const cameraId = 22;
-    final mockCameraControl = MockCameraControl();
-    final mockProcessCameraProvider = MockProcessCameraProvider();
-
-    // Set directly for test versus calling createCamera.
-    camera.imageCapture = MockImageCapture();
-    camera.cameraControl = mockCameraControl;
-
-    // Ignore setting target rotation for this test; tested seprately.
-    camera.captureOrientationLocked = true;
-    camera.processCameraProvider = mockProcessCameraProvider;
-
-    // Tell plugin to mock call to get current photo orientation and systemServicesManager.
-    PigeonOverrides.systemServicesManager_new =
-        ({required void Function(SystemServicesManager, String) onCameraError}) {
-          return MockSystemServicesManager();
-        };
-
-    when(mockProcessCameraProvider.isBound(camera.imageCapture)).thenAnswer((_) async => true);
-
     for (final FlashMode flashMode in FlashMode.values) {
       await camera.setFlashMode(cameraId, flashMode);
-
-      CameraXFlashMode? expectedFlashMode;
-      switch (flashMode) {
-        case FlashMode.off:
-          expectedFlashMode = CameraXFlashMode.off;
-        case FlashMode.auto:
-          expectedFlashMode = CameraXFlashMode.auto;
-        case FlashMode.always:
-          expectedFlashMode = CameraXFlashMode.on;
-        case FlashMode.torch:
-          expectedFlashMode = null;
-      }
-
-      if (expectedFlashMode == null) {
-        // Torch mode enabled and won't be used for configuring image capture.
-        continue;
-      }
-
-      verifyNever(mockCameraControl.enableTorch(true));
-      expect(camera.torchEnabled, isFalse);
       await camera.takePicture(cameraId);
-      verify(camera.imageCapture!.setFlashMode(expectedFlashMode));
+    }
+
+    for (final CameraXFlashMode nativeFlashMode in CameraXFlashMode.values) {
+      verifyNever(camera.imageCapture!.setFlashMode(nativeFlashMode));
     }
   });
 
