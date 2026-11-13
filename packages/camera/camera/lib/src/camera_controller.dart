@@ -28,6 +28,17 @@ Future<List<CameraDescription>> availableCameras() async {
   return CameraPlatform.instance.availableCameras();
 }
 
+/// Completes with the preview dynamic ranges that the camera [description]
+/// supports.
+///
+/// Pass one of them as `previewDynamicRange` when creating a
+/// [CameraController].
+Future<Iterable<PreviewDynamicRange>> availablePreviewDynamicRanges(
+  CameraDescription description,
+) async {
+  return CameraPlatform.instance.getSupportedPreviewDynamicRanges(description);
+}
+
 /// The state of a [CameraController].
 class CameraValue {
   /// Creates a new camera controller state.
@@ -243,6 +254,11 @@ class CameraController extends ValueNotifier<CameraValue> {
   /// - [fps] controls rate at which frames should be captured by the camera in frames per second.
   /// - [videoBitrate] controls the video encoding bit rate for recording.
   /// - [audioBitrate] controls the audio encoding bit rate for recording.
+  ///
+  /// [previewDynamicRange] requests an HDR preview. It falls back to
+  /// [PreviewDynamicRange.sdr] when unsupported; check
+  /// [availablePreviewDynamicRanges] first and read the applied value with
+  /// [getPreviewDynamicRange].
 
   CameraController(
     CameraDescription description,
@@ -251,6 +267,7 @@ class CameraController extends ValueNotifier<CameraValue> {
     int? fps,
     int? videoBitrate,
     int? audioBitrate,
+    PreviewDynamicRange previewDynamicRange = PreviewDynamicRange.sdr,
     this.imageFormatGroup,
   }) : mediaSettings = MediaSettings(
          resolutionPreset: resolutionPreset,
@@ -258,6 +275,7 @@ class CameraController extends ValueNotifier<CameraValue> {
          fps: fps,
          videoBitrate: videoBitrate,
          audioBitrate: audioBitrate,
+         previewDynamicRange: previewDynamicRange,
        ),
        super(CameraValue.uninitialized(description));
 
@@ -820,6 +838,19 @@ class CameraController extends ValueNotifier<CameraValue> {
     _throwIfNotInitialized('setZeroShutterLagEnabled');
     try {
       await CameraPlatform.instance.setZeroShutterLagEnabled(_cameraId, enabled);
+    } on PlatformException catch (e) {
+      throw CameraException(e.code, e.message);
+    }
+  }
+
+  /// Returns the dynamic range applied to the preview.
+  ///
+  /// This is [PreviewDynamicRange.sdr] when the requested `previewDynamicRange`
+  /// could not be applied.
+  Future<PreviewDynamicRange> getPreviewDynamicRange() async {
+    _throwIfNotInitialized('getPreviewDynamicRange');
+    try {
+      return await CameraPlatform.instance.getPreviewDynamicRange(_cameraId);
     } on PlatformException catch (e) {
       throw CameraException(e.code, e.message);
     }
