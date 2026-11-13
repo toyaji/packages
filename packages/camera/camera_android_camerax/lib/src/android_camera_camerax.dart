@@ -13,6 +13,7 @@ import 'package:flutter/widgets.dart' show Texture, Widget, visibleForTesting;
 import 'package:stream_transform/stream_transform.dart';
 
 import 'camerax_library.dart';
+import 'preview_view_preview.dart';
 import 'rotated_preview_delegate.dart';
 
 /// The Android implementation of [CameraPlatform] that uses the CameraX library.
@@ -48,6 +49,18 @@ class AndroidCameraCameraX extends CameraPlatform {
   /// The [Preview] instance that can be configured to present a live camera preview.
   @visibleForTesting
   Preview? preview;
+
+  /// The [PreviewView] that renders [preview] when a 10-bit HLG preview was
+  /// requested and is supported, or null when [preview] renders to a Flutter
+  /// texture.
+  @visibleForTesting
+  PreviewView? previewView;
+
+  /// Returns the `InstanceManager` identifier of a [PreviewView], which the
+  /// platform view uses to find the native view.
+  @visibleForTesting
+  int Function(PreviewView view) previewViewIdentifier =
+      (PreviewView view) => PigeonInstanceManager.instance.getIdentifier(view)!;
 
   /// The [VideoCapture] instance that can be instantiated and configured to
   /// handle video recording
@@ -291,8 +304,25 @@ class AndroidCameraCameraX extends CameraPlatform {
   /// The configured target FPS range for the camera.
   CameraIntegerRange? _targetFpsRange;
 
-  /// The ID of the surface texture that the camera preview is drawn to.
+  /// The ID of the surface texture that the camera preview is drawn to, or the
+  /// `InstanceManager` identifier of [previewView] when it renders the preview.
   late int _flutterSurfaceTextureId;
+
+  /// The dynamic range that [preview] is currently configured with.
+  PreviewDynamicRange _appliedPreviewDynamicRange = PreviewDynamicRange.sdr;
+
+  /// The ID of the Flutter texture that [preview] renders to after an HLG
+  /// preview was switched back to SDR, or null if [preview] never moved to a
+  /// texture.
+  int? _fallbackPreviewTextureId;
+
+  /// Whether [videoCapture] cannot record the 10-bit HLG range of [preview],
+  /// in which case recording switches [preview] to SDR first.
+  bool _recordingNeedsSdrPreview = false;
+
+  /// The first Android version that renders 10-bit HLG content through a
+  /// `SurfaceView`.
+  static const int _hdrPreviewMinSdkVersion = 34;
 
   /// The configured format of outputted images from image streaming.
   int? _imageAnalysisOutputImageFormat;
@@ -414,11 +444,38 @@ class AndroidCameraCameraX extends CameraPlatform {
     unawaited(processCameraProvider!.unbindAll());
 
     // Configure Preview instance.
-    preview = Preview(
-      resolutionSelector: _presetResolutionSelector,
-      targetFpsRange: _targetFpsRange,
-    );
-    _flutterSurfaceTextureId = await preview!.setSurfaceProvider(systemServicesManager);
+    previewView = null;
+    _fallbackPreviewTextureId = null;
+    _recordingNeedsSdrPreview = false;
+    _appliedPreviewDynamicRange = PreviewDynamicRange.sdr;
+    final bool useHdrPreview =
+        mediaSettings?.previewDynamicRange == PreviewDynamicRange.hlg10 &&
+        (await getSupportedPreviewDynamicRanges(
+          cameraDescription,
+        )).contains(PreviewDynamicRange.hlg10);
+    if (useHdrPreview) {
+      // A 10-bit HLG preview is only rendered as HDR by a SurfaceView, so it
+      // is shown through a PreviewView instead of a Flutter texture.
+      preview = Preview(
+        resolutionSelector: _presetResolutionSelector,
+        targetFpsRange: _targetFpsRange,
+        dynamicRange: DynamicRangeType.hlg10,
+      );
+      _appliedPreviewDynamicRange = PreviewDynamicRange.hlg10;
+      final view = PreviewView();
+      _flutterSurfaceTextureId = previewViewIdentifier(view);
+      await view.setImplementationMode(PreviewViewImplementationMode.performance);
+      // Fills the preview box like the texture-based preview does.
+      await view.setScaleType(PreviewViewScaleType.fillCenter);
+      await preview!.setViewSurfaceProvider(await view.getSurfaceProvider());
+      previewView = view;
+    } else {
+      preview = Preview(
+        resolutionSelector: _presetResolutionSelector,
+        targetFpsRange: _targetFpsRange,
+      );
+      _flutterSurfaceTextureId = await preview!.setSurfaceProvider(systemServicesManager);
+    }
 
     // Configure ImageCapture instance.
     imageCapture = ImageCapture(
@@ -434,12 +491,32 @@ class AndroidCameraCameraX extends CameraPlatform {
       qualitySelector: presetQualitySelector,
       targetVideoEncodingBitRate: mediaSettings?.videoBitrate,
     );
-    videoCapture = VideoCapture.withOutput(videoOutput: recorder!, targetFpsRange: _targetFpsRange);
+    DynamicRangeType? videoDynamicRange;
+    if (useHdrPreview) {
+      // VideoCapture records SDR unless told otherwise, so it is set to HLG
+      // when the camera can record it; otherwise recording switches the
+      // preview to SDR before binding.
+      final VideoCapabilities capabilities = await Recorder.getVideoCapabilities(
+        _savedCameras[cameraDescription.name]!,
+      );
+      final List<DynamicRangeType> videoRanges = await capabilities.getSupportedDynamicRanges();
+      if (videoRanges.contains(DynamicRangeType.hlg10)) {
+        videoDynamicRange = DynamicRangeType.hlg10;
+      } else {
+        _recordingNeedsSdrPreview = true;
+      }
+    }
+    videoCapture = VideoCapture.withOutput(
+      videoOutput: recorder!,
+      targetFpsRange: _targetFpsRange,
+      dynamicRange: videoDynamicRange,
+    );
 
     // Retrieve info required for correcting the rotation of the camera preview
     // if necessary.
     sensorOrientationDegrees = cameraDescription.sensorOrientation.toDouble();
-    _handlesCropAndRotation = await preview!.surfaceProducerHandlesCropAndRotation();
+    _handlesCropAndRotation =
+        previewView == null && await preview!.surfaceProducerHandlesCropAndRotation();
     _initialDeviceOrientation = _deserializeDeviceOrientation(
       await deviceOrientationManager.getUiOrientation(),
     );
@@ -447,6 +524,36 @@ class AndroidCameraCameraX extends CameraPlatform {
 
     return _flutterSurfaceTextureId;
   }
+
+  /// Returns [PreviewDynamicRange.sdr], plus [PreviewDynamicRange.hlg10] when
+  /// the camera supports 10-bit HLG and the device runs Android 14 or later,
+  /// the first version that renders HLG content through a `SurfaceView`.
+  @override
+  Future<Iterable<PreviewDynamicRange>> getSupportedPreviewDynamicRanges(
+    CameraDescription cameraDescription,
+  ) async {
+    final supported = <PreviewDynamicRange>[PreviewDynamicRange.sdr];
+    final CameraInfo? chosenCameraInfo = _savedCameras[cameraDescription.name];
+    if (chosenCameraInfo == null ||
+        await systemServicesManager.getAndroidSdkVersion() < _hdrPreviewMinSdkVersion) {
+      return supported;
+    }
+
+    final List<DynamicRangeType> cameraRanges = await chosenCameraInfo.querySupportedDynamicRanges(
+      <DynamicRangeType>[DynamicRangeType.hlg10],
+    );
+    if (cameraRanges.contains(DynamicRangeType.hlg10)) {
+      supported.add(PreviewDynamicRange.hlg10);
+    }
+    return supported;
+  }
+
+  /// Returns the dynamic range that the preview of the camera with ID
+  /// [cameraId] is actually using, which is [PreviewDynamicRange.sdr] if a
+  /// requested HLG preview had to fall back.
+  @override
+  Future<PreviewDynamicRange> getPreviewDynamicRange(int cameraId) async =>
+      _appliedPreviewDynamicRange;
 
   /// Initializes the camera with ID [cameraId] on the device.
   ///
@@ -487,11 +594,29 @@ class AndroidCameraCameraX extends CameraPlatform {
     // Bind configured UseCases to ProcessCameraProvider instance & mark Preview
     // instance as bound but not paused. Video capture is bound at first use
     // instead of here.
-    camera = await processCameraProvider!.bindToLifecycle(cameraSelector!, <UseCase>[
-      preview!,
-      imageCapture!,
-      imageAnalysis!,
-    ]);
+    if (_appliedPreviewDynamicRange == PreviewDynamicRange.hlg10) {
+      // A 10-bit preview cannot be combined with ImageAnalysis, so it is bound
+      // at first image stream use instead of here.
+      try {
+        camera = await processCameraProvider!.bindToLifecycle(cameraSelector!, <UseCase>[
+          preview!,
+          imageCapture!,
+        ]);
+      } on PlatformException {
+        await _rebindPreviewAsSdr();
+        camera = await processCameraProvider!.bindToLifecycle(cameraSelector!, <UseCase>[
+          preview!,
+          imageCapture!,
+          imageAnalysis!,
+        ]);
+      }
+    } else {
+      camera = await processCameraProvider!.bindToLifecycle(cameraSelector!, <UseCase>[
+        preview!,
+        imageCapture!,
+        imageAnalysis!,
+      ]);
+    }
     await _updateCameraInfoAndLiveCameraState(_flutterSurfaceTextureId);
     previewInitiallyBound = true;
     _previewIsPaused = false;
@@ -526,7 +651,10 @@ class AndroidCameraCameraX extends CameraPlatform {
   /// Releases the resources of the accessed camera with ID [cameraId].
   @override
   Future<void> dispose(int cameraId) async {
-    await preview?.releaseSurfaceProvider();
+    if (previewView == null) {
+      await preview?.releaseSurfaceProvider();
+    }
+    previewView = null;
     await liveCameraState?.removeObservers();
     await processCameraProvider?.unbindAll();
     await imageAnalysis?.clearAnalyzer();
@@ -584,6 +712,12 @@ class AndroidCameraCameraX extends CameraPlatform {
     // and should not be changed until unlocked.
     shouldSetDefaultRotation = true;
     captureOrientationLocked = true;
+
+    // A `PreviewView` follows the display rotation on its own and cannot keep
+    // a locked orientation, so the preview moves to an SDR texture.
+    if (previewView != null && recording == null) {
+      await _switchPreviewToTexture(cameraId);
+    }
 
     // Get target rotation based on locked orientation.
     final int targetLockedRotation = _getRotationConstantFromDeviceOrientation(orientation);
@@ -1015,7 +1149,15 @@ class AndroidCameraCameraX extends CameraPlatform {
     final Stream<DeviceOrientation> deviceOrientationStream = onDeviceOrientationChanged().map(
       (DeviceOrientationChangedEvent e) => e.orientation,
     );
-    final Widget preview = Texture(textureId: cameraId);
+    if (previewView != null) {
+      return PreviewViewPreview(
+        previewViewId: _flutterSurfaceTextureId,
+        initialDeviceOrientation: _initialDeviceOrientation,
+        deviceOrientationStream: deviceOrientationStream,
+      );
+    }
+
+    final Widget preview = Texture(textureId: _fallbackPreviewTextureId ?? cameraId);
 
     return RotatedPreviewDelegate(
       handlesCropAndRotation: _handlesCropAndRotation,
@@ -1215,7 +1357,11 @@ class AndroidCameraCameraX extends CameraPlatform {
       await _unbindUseCaseFromLifecycle(imageAnalysis!);
     }
 
-    await _bindUseCaseToLifecycle(videoCapture!, options.cameraId);
+    if (_recordingNeedsSdrPreview && _appliedPreviewDynamicRange == PreviewDynamicRange.hlg10) {
+      await _rebindPreviewAsSdr();
+      await _bindUseCaseToLifecycle(preview!, options.cameraId);
+    }
+    await _bindUseCaseWithSdrFallback(videoCapture!, options.cameraId);
 
     // Set target rotation to default CameraX rotation only if capture
     // orientation not locked.
@@ -1394,9 +1540,68 @@ class AndroidCameraCameraX extends CameraPlatform {
     await _updateCameraInfoAndLiveCameraState(cameraId);
   }
 
+  /// Binds [useCase] like [_bindUseCaseToLifecycle], but if a 10-bit HLG
+  /// preview makes the combination unsupported, renders the preview as SDR and
+  /// binds [useCase] with it instead.
+  Future<void> _bindUseCaseWithSdrFallback(UseCase useCase, int cameraId) async {
+    try {
+      await _bindUseCaseToLifecycle(useCase, cameraId);
+    } on PlatformException {
+      if (_appliedPreviewDynamicRange != PreviewDynamicRange.hlg10) {
+        rethrow;
+      }
+      await _rebindPreviewAsSdr();
+      camera = await processCameraProvider!.bindToLifecycle(cameraSelector!, <UseCase>[
+        if (!_previewIsPaused) preview!,
+        useCase,
+      ]);
+      await _updateCameraInfoAndLiveCameraState(cameraId);
+    }
+  }
+
+  /// Replaces the 10-bit HLG [preview] with an SDR one that renders to the same
+  /// [previewView].
+  ///
+  /// The new [preview] is not bound; the caller binds it together with the use
+  /// cases that need it.
+  Future<void> _rebindPreviewAsSdr() async {
+    await _unbindUseCaseFromLifecycle(preview!);
+    preview = Preview(
+      resolutionSelector: _presetResolutionSelector,
+      targetFpsRange: _targetFpsRange,
+    );
+    await preview!.setViewSurfaceProvider(await previewView!.getSurfaceProvider());
+    _appliedPreviewDynamicRange = PreviewDynamicRange.sdr;
+  }
+
+  /// Moves the preview from [previewView] to an SDR Flutter texture, which
+  /// [buildPreview] shows from then on.
+  Future<void> _switchPreviewToTexture(int cameraId) async {
+    await _unbindUseCaseFromLifecycle(preview!);
+    preview = Preview(
+      resolutionSelector: _presetResolutionSelector,
+      targetFpsRange: _targetFpsRange,
+    );
+    _fallbackPreviewTextureId = await preview!.setSurfaceProvider(systemServicesManager);
+    _handlesCropAndRotation = await preview!.surfaceProducerHandlesCropAndRotation();
+    previewView = null;
+    _appliedPreviewDynamicRange = PreviewDynamicRange.sdr;
+    if (!_recordingNeedsSdrPreview && videoCapture != null) {
+      // The HLG VideoCapture cannot be bound with an SDR preview.
+      await _unbindUseCaseFromLifecycle(videoCapture!);
+      videoCapture = VideoCapture.withOutput(
+        videoOutput: recorder!,
+        targetFpsRange: _targetFpsRange,
+      );
+    }
+    if (!_previewIsPaused) {
+      await _bindUseCaseToLifecycle(preview!, cameraId);
+    }
+  }
+
   /// Configures the [imageAnalysis] instance for image streaming.
   Future<void> _configureImageAnalysis(int cameraId) async {
-    await _bindUseCaseToLifecycle(imageAnalysis!, cameraId);
+    await _bindUseCaseWithSdrFallback(imageAnalysis!, cameraId);
 
     // Set target rotation to default CameraX rotation only if capture
     // orientation not locked.
