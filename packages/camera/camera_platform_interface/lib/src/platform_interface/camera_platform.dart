@@ -365,4 +365,26 @@ abstract class CameraPlatform extends PlatformInterface {
   Future<void> setZeroShutterLagEnabled(int cameraId, bool enabled) {
     throw UnimplementedError('setZeroShutterLagEnabled() is not implemented.');
   }
+
+  /// Returns the preview dynamic ranges that the camera [description] supports.
+  ///
+  /// Call this before creating the camera, then request one of the returned
+  /// values with [MediaSettings.previewDynamicRange].
+  ///
+  /// The default implementation returns only [PreviewDynamicRange.sdr].
+  Future<Iterable<PreviewDynamicRange>> getSupportedPreviewDynamicRanges(
+    CameraDescription description,
+  ) async => <PreviewDynamicRange>[PreviewDynamicRange.sdr];
+
+  /// Returns the dynamic range currently applied to the selected camera.
+  ///
+  /// This can differ from the requested [MediaSettings.previewDynamicRange]:
+  /// the camera falls back to [PreviewDynamicRange.sdr] when the request
+  /// cannot be satisfied, or later when an operation that cannot run with
+  /// HDR is started (for example image streaming on some platforms). Read it
+  /// again after starting such an operation.
+  ///
+  /// The default implementation returns [PreviewDynamicRange.sdr].
+  Future<PreviewDynamicRange> getPreviewDynamicRange(int cameraId) async => PreviewDynamicRange.sdr;
+
 }
