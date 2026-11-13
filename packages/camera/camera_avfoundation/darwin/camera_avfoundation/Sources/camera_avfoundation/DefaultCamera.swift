@@ -925,6 +925,9 @@ final class DefaultCamera: NSObject, Camera {
       }
     }
 
+    // [Zelly patch] Prioritize shot-to-shot speed over per-shot fusion processing.
+    settings.photoQualityPrioritization = .speed
+
     if flashMode != .torch {
       settings.flashMode = getAVCaptureFlashMode(for: flashMode)
     }
