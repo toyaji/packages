@@ -79,7 +79,8 @@ final class CameraSampleBufferTests: XCTestCase {
       framesPerSecond: nil,
       videoBitrate: nil,
       audioBitrate: nil,
-      enableAudio: true)
+      enableAudio: true,
+      previewDynamicRange: .sdr)
     configuration.mediaSettingsWrapper = FakeMediaSettingsAVWrapper(inputMock: input)
 
     configuration.assetWriterFactory = { url, fileType in

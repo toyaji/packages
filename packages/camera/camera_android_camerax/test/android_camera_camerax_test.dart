@@ -42,6 +42,7 @@ import 'android_camera_camerax_test.mocks.dart';
   MockSpec<PendingRecording>(),
   MockSpec<PlaneProxy>(),
   MockSpec<Preview>(),
+  MockSpec<PreviewView>(),
   MockSpec<ProcessCameraProvider>(),
   MockSpec<QualitySelector>(),
   MockSpec<Recorder>(),
@@ -51,6 +52,7 @@ import 'android_camera_camerax_test.mocks.dart';
   MockSpec<Recording>(),
   MockSpec<RecordingStats>(),
   MockSpec<SystemServicesManager>(),
+  MockSpec<VideoCapabilities>(),
   MockSpec<VideoCapture>(),
   MockSpec<VideoRecordEventFinalize>(),
   MockSpec<VideoRecordEventStart>(),
@@ -148,9 +150,10 @@ void main() {
       int? targetRotation,
       CameraIntegerRange? targetFpsRange,
       ResolutionSelector? resolutionSelector,
+      DynamicRangeType? dynamicRange,
     })?
     newPreview,
-    VideoCapture Function({required VideoOutput videoOutput, CameraIntegerRange? targetFpsRange})?
+    VideoCapture Function({required VideoOutput videoOutput, CameraIntegerRange? targetFpsRange, DynamicRangeType? dynamicRange})?
     withOutputVideoCapture,
     ImageAnalysis Function({
       ResolutionSelector? resolutionSelector,
@@ -188,6 +191,7 @@ void main() {
           int? targetRotation,
           CameraIntegerRange? targetFpsRange,
           ResolutionSelector? resolutionSelector,
+          DynamicRangeType? dynamicRange,
         }) {
           final mockPreview = MockPreview();
           final testResolutionInfo = ResolutionInfo.pigeon_detached(resolution: MockCameraSize());
@@ -218,7 +222,7 @@ void main() {
         };
     PigeonOverrides.videoCapture_withOutput =
         withOutputVideoCapture ??
-        ({required VideoOutput videoOutput, CameraIntegerRange? targetFpsRange}) {
+        ({required VideoOutput videoOutput, CameraIntegerRange? targetFpsRange, DynamicRangeType? dynamicRange}) {
           return MockVideoCapture();
         };
     PigeonOverrides.imageAnalysis_new =
@@ -555,6 +559,7 @@ void main() {
             int? targetRotation,
             CameraIntegerRange? targetFpsRange,
             ResolutionSelector? resolutionSelector,
+            DynamicRangeType? dynamicRange,
           }) {
             return mockPreview;
           };
@@ -575,7 +580,7 @@ void main() {
             return mockRecorder;
           };
       PigeonOverrides.videoCapture_withOutput =
-          ({required VideoOutput videoOutput, CameraIntegerRange? targetFpsRange}) {
+          ({required VideoOutput videoOutput, CameraIntegerRange? targetFpsRange, DynamicRangeType? dynamicRange}) {
             return mockVideoCapture;
           };
       PigeonOverrides.imageAnalysis_new =
@@ -1092,6 +1097,7 @@ void main() {
             int? targetRotation,
             CameraIntegerRange? targetFpsRange,
             ResolutionSelector? resolutionSelector,
+            DynamicRangeType? dynamicRange,
           }) {
             final testResolutionInfo = ResolutionInfo.pigeon_detached(resolution: MockCameraSize());
             when(mockPreview.getResolutionInfo()).thenAnswer((_) async => testResolutionInfo);
@@ -1112,7 +1118,7 @@ void main() {
             return mockRecorder;
           };
       PigeonOverrides.videoCapture_withOutput =
-          ({required VideoOutput videoOutput, CameraIntegerRange? targetFpsRange}) {
+          ({required VideoOutput videoOutput, CameraIntegerRange? targetFpsRange, DynamicRangeType? dynamicRange}) {
             return mockVideoCapture;
           };
       PigeonOverrides.imageAnalysis_new =
@@ -1334,6 +1340,7 @@ void main() {
             int? targetRotation,
             CameraIntegerRange? targetFpsRange,
             ResolutionSelector? resolutionSelector,
+            DynamicRangeType? dynamicRange,
           }) {
             final mockPreview = MockPreview();
             when(
@@ -1390,6 +1397,7 @@ void main() {
       mockProcessCameraProvider,
       newPreview:
           ({
+            DynamicRangeType? dynamicRange,
             ResolutionSelector? resolutionSelector,
             CameraIntegerRange? targetFpsRange,
             int? targetRotation,
@@ -1401,7 +1409,7 @@ void main() {
             return mockPreview;
           },
       withOutputVideoCapture:
-          ({CameraIntegerRange? targetFpsRange, required VideoOutput videoOutput}) {
+          ({CameraIntegerRange? targetFpsRange, required VideoOutput videoOutput, DynamicRangeType? dynamicRange}) {
             targetVideoCaptureFpsRange = targetFpsRange;
             return MockVideoCapture();
           },
@@ -1502,6 +1510,7 @@ void main() {
           int? targetRotation,
           CameraIntegerRange? targetFpsRange,
           ResolutionSelector? resolutionSelector,
+          DynamicRangeType? dynamicRange,
         }) {
           return mockPreview;
         };
@@ -1524,7 +1533,7 @@ void main() {
           return mockRecorder;
         };
     PigeonOverrides.videoCapture_withOutput =
-        ({required VideoOutput videoOutput, CameraIntegerRange? targetFpsRange}) {
+        ({required VideoOutput videoOutput, CameraIntegerRange? targetFpsRange, DynamicRangeType? dynamicRange}) {
           return mockVideoCapture;
         };
     PigeonOverrides.imageAnalysis_new =
@@ -1716,6 +1725,7 @@ void main() {
       mockProcessCameraProvider,
       newPreview:
           ({
+            DynamicRangeType? dynamicRange,
             ResolutionSelector? resolutionSelector,
             int? targetRotation,
             CameraIntegerRange? targetFpsRange,
@@ -1794,6 +1804,7 @@ void main() {
             },
         newPreview:
             ({
+              DynamicRangeType? dynamicRange,
               ResolutionSelector? resolutionSelector,
               int? targetRotation,
               CameraIntegerRange? targetFpsRange,
@@ -1858,6 +1869,7 @@ void main() {
           int? targetRotation,
           CameraIntegerRange? targetFpsRange,
           ResolutionSelector? resolutionSelector,
+          DynamicRangeType? dynamicRange,
         }) => mockPreview;
     PigeonOverrides.imageCapture_new =
         ({
@@ -1871,7 +1883,7 @@ void main() {
         ({int? aspectRatio, int? targetVideoEncodingBitRate, QualitySelector? qualitySelector}) =>
             MockRecorder();
     PigeonOverrides.videoCapture_withOutput =
-        ({required VideoOutput videoOutput, CameraIntegerRange? targetFpsRange}) =>
+        ({required VideoOutput videoOutput, CameraIntegerRange? targetFpsRange, DynamicRangeType? dynamicRange}) =>
             MockVideoCapture();
     PigeonOverrides.imageAnalysis_new =
         ({
@@ -3166,6 +3178,7 @@ void main() {
       PigeonOverrides.preview_new =
           ({
             ResolutionSelector? resolutionSelector,
+            DynamicRangeType? dynamicRange,
             int? targetRotation,
             CameraIntegerRange? targetFpsRange,
           }) {
@@ -3196,7 +3209,7 @@ void main() {
             return mockRecorder;
           };
       PigeonOverrides.videoCapture_withOutput =
-          ({required VideoOutput videoOutput, CameraIntegerRange? targetFpsRange}) {
+          ({required VideoOutput videoOutput, CameraIntegerRange? targetFpsRange, DynamicRangeType? dynamicRange}) {
             return mockVideoCapture;
           };
       PigeonOverrides.imageAnalysis_new =
@@ -3379,6 +3392,7 @@ void main() {
       PigeonOverrides.preview_new =
           ({
             ResolutionSelector? resolutionSelector,
+            DynamicRangeType? dynamicRange,
             int? targetRotation,
             CameraIntegerRange? targetFpsRange,
           }) {
@@ -3409,7 +3423,7 @@ void main() {
             return mockRecorder;
           };
       PigeonOverrides.videoCapture_withOutput =
-          ({required VideoOutput videoOutput, CameraIntegerRange? targetFpsRange}) {
+          ({required VideoOutput videoOutput, CameraIntegerRange? targetFpsRange, DynamicRangeType? dynamicRange}) {
             return mockVideoCapture;
           };
       PigeonOverrides.imageAnalysis_new =
@@ -6377,6 +6391,239 @@ void main() {
       verifyNoMoreInteractions(camera.camera);
     },
   );
+  group('preview dynamic range', () {
+    const backCamera = CameraDescription(
+      name: '0',
+      lensDirection: CameraLensDirection.back,
+      sensorOrientation: 90,
+    );
+
+    Future<AndroidCameraCameraX> setUpCameraWithBackCamera({
+      required int sdkVersion,
+      required List<DynamicRangeType> cameraRanges,
+    }) async {
+      final camera = AndroidCameraCameraX();
+      final mockProcessCameraProvider = MockProcessCameraProvider();
+      final mockBackCameraInfo = MockCameraInfo();
+      final mockSystemServicesManager = MockSystemServicesManager();
+      PigeonOverrides.processCameraProvider_getInstance = () async => mockProcessCameraProvider;
+      PigeonOverrides.camera2CameraInfo_from = ({required dynamic cameraInfo}) {
+        final camera2cameraInfo = MockCamera2CameraInfo();
+        when(camera2cameraInfo.getCameraId()).thenAnswer((_) async => '0');
+        return camera2cameraInfo;
+      };
+      PigeonOverrides.systemServicesManager_new =
+          ({required void Function(SystemServicesManager, String) onCameraError}) =>
+              mockSystemServicesManager;
+      when(mockSystemServicesManager.getAndroidSdkVersion()).thenAnswer((_) async => sdkVersion);
+      when(
+        mockProcessCameraProvider.getAvailableCameraInfos(),
+      ).thenAnswer((_) async => <MockCameraInfo>[mockBackCameraInfo]);
+      when(mockBackCameraInfo.sensorRotationDegrees).thenReturn(90);
+      when(mockBackCameraInfo.lensFacing).thenReturn(LensFacing.back);
+      when(
+        mockBackCameraInfo.querySupportedDynamicRanges(any),
+      ).thenAnswer((_) async => cameraRanges);
+      await camera.availableCameras();
+      return camera;
+    }
+
+    test('getSupportedPreviewDynamicRanges includes hlg10 on Android 14+ when the camera has it',
+        () async {
+      final AndroidCameraCameraX camera = await setUpCameraWithBackCamera(
+        sdkVersion: 34,
+        cameraRanges: <DynamicRangeType>[DynamicRangeType.hlg10],
+      );
+
+      expect(await camera.getSupportedPreviewDynamicRanges(backCamera), <PreviewDynamicRange>[
+        PreviewDynamicRange.sdr,
+        PreviewDynamicRange.hlg10,
+      ]);
+    });
+
+    test('getSupportedPreviewDynamicRanges is sdr only below Android 14', () async {
+      final AndroidCameraCameraX camera = await setUpCameraWithBackCamera(
+        sdkVersion: 33,
+        cameraRanges: <DynamicRangeType>[DynamicRangeType.hlg10],
+      );
+
+      expect(await camera.getSupportedPreviewDynamicRanges(backCamera), <PreviewDynamicRange>[
+        PreviewDynamicRange.sdr,
+      ]);
+    });
+
+    test('getSupportedPreviewDynamicRanges is sdr only when the camera lacks HLG', () async {
+      final AndroidCameraCameraX camera = await setUpCameraWithBackCamera(
+        sdkVersion: 34,
+        cameraRanges: <DynamicRangeType>[],
+      );
+
+      expect(await camera.getSupportedPreviewDynamicRanges(backCamera), <PreviewDynamicRange>[
+        PreviewDynamicRange.sdr,
+      ]);
+    });
+
+    test('getSupportedPreviewDynamicRanges is sdr only for an unknown camera', () async {
+      final camera = AndroidCameraCameraX();
+
+      expect(await camera.getSupportedPreviewDynamicRanges(backCamera), <PreviewDynamicRange>[
+        PreviewDynamicRange.sdr,
+      ]);
+    });
+
+    test('getPreviewDynamicRange defaults to sdr', () async {
+      final camera = AndroidCameraCameraX();
+
+      expect(await camera.getPreviewDynamicRange(0), PreviewDynamicRange.sdr);
+    });
+
+    group('hlg10 camera', () {
+      late MockProcessCameraProvider mockProcessCameraProvider;
+      late MockPreviewView mockPreviewView;
+      late List<DynamicRangeType?> previewRanges;
+      late List<DynamicRangeType?> videoRanges;
+      late List<MockPreview> previews;
+
+      Future<AndroidCameraCameraX> createHlgCamera({required bool recorderSupportsHlg}) async {
+        mockProcessCameraProvider = MockProcessCameraProvider();
+        final mockCamera = MockCamera();
+        final mockCameraInfo = MockCameraInfo();
+        when(mockProcessCameraProvider.bindToLifecycle(any, any)).thenAnswer((_) async => mockCamera);
+        when(mockCamera.getCameraInfo()).thenAnswer((_) async => mockCameraInfo);
+        when(mockCameraInfo.getCameraState()).thenAnswer((_) async => MockLiveCameraState());
+        previewRanges = <DynamicRangeType?>[];
+        videoRanges = <DynamicRangeType?>[];
+        previews = <MockPreview>[];
+        setUpOverridesForTestingUseCaseConfiguration(
+          mockProcessCameraProvider,
+          newPreview:
+              ({
+                int? targetRotation,
+                CameraIntegerRange? targetFpsRange,
+                ResolutionSelector? resolutionSelector,
+                DynamicRangeType? dynamicRange,
+              }) {
+                previewRanges.add(dynamicRange);
+                final mockPreview = MockPreview();
+                when(mockPreview.getResolutionInfo()).thenAnswer(
+                  (_) async => ResolutionInfo.pigeon_detached(resolution: MockCameraSize()),
+                );
+                when(mockPreview.setSurfaceProvider(any)).thenAnswer((_) async => 77);
+                previews.add(mockPreview);
+                return mockPreview;
+              },
+          withOutputVideoCapture:
+              ({
+                required VideoOutput videoOutput,
+                CameraIntegerRange? targetFpsRange,
+                DynamicRangeType? dynamicRange,
+              }) {
+                videoRanges.add(dynamicRange);
+                return MockVideoCapture();
+              },
+        );
+        final AndroidCameraCameraX camera = await setUpCameraWithBackCamera(
+          sdkVersion: 34,
+          cameraRanges: <DynamicRangeType>[DynamicRangeType.hlg10],
+        );
+        camera.processCameraProvider = mockProcessCameraProvider;
+        final mockVideoCapabilities = MockVideoCapabilities();
+        when(mockVideoCapabilities.getSupportedDynamicRanges()).thenAnswer(
+          (_) async => <DynamicRangeType>[
+            DynamicRangeType.sdr,
+            if (recorderSupportsHlg) DynamicRangeType.hlg10,
+          ],
+        );
+        PigeonOverrides.recorder_getVideoCapabilities = (_) async {
+          final VideoCapabilities capabilities = mockVideoCapabilities;
+          return capabilities;
+        };
+        mockPreviewView = MockPreviewView();
+        when(mockPreviewView.getSurfaceProvider()).thenAnswer(
+          (_) async => PreviewSurfaceProvider.pigeon_detached(),
+        );
+        PigeonOverrides.previewView_new = () => mockPreviewView;
+        camera.previewViewIdentifier = (PreviewView view) => 42;
+
+        await camera.createCameraWithSettings(
+          backCamera,
+          const MediaSettings(previewDynamicRange: PreviewDynamicRange.hlg10),
+        );
+        return camera;
+      }
+
+      test('renders an HLG preview through a SurfaceView PreviewView', () async {
+        final AndroidCameraCameraX camera = await createHlgCamera(recorderSupportsHlg: true);
+
+        expect(previewRanges, <DynamicRangeType?>[DynamicRangeType.hlg10]);
+        verify(mockPreviewView.setImplementationMode(PreviewViewImplementationMode.performance));
+        verify(mockPreviewView.setScaleType(PreviewViewScaleType.fillCenter));
+        verify(previews.single.setViewSurfaceProvider(any));
+        verifyNever(previews.single.setSurfaceProvider(any));
+        expect(await camera.getPreviewDynamicRange(42), PreviewDynamicRange.hlg10);
+      });
+
+      test('records in HLG when the recorder supports it', () async {
+        await createHlgCamera(recorderSupportsHlg: true);
+
+        expect(videoRanges, <DynamicRangeType?>[DynamicRangeType.hlg10]);
+      });
+
+      test('records in SDR when the recorder lacks HLG', () async {
+        await createHlgCamera(recorderSupportsHlg: false);
+
+        expect(videoRanges, <DynamicRangeType?>[null]);
+      });
+
+      test('initializeCamera does not bind ImageAnalysis with an HLG preview', () async {
+        final AndroidCameraCameraX camera = await createHlgCamera(recorderSupportsHlg: true);
+
+        await camera.initializeCamera(42);
+
+        final List<dynamic> bound = verify(
+          mockProcessCameraProvider.bindToLifecycle(any, captureAny),
+        ).captured;
+        final useCases = bound.first as List<UseCase>;
+        expect(useCases, contains(camera.preview));
+        expect(useCases, contains(camera.imageCapture));
+        expect(useCases, isNot(contains(camera.imageAnalysis)));
+      });
+
+      test('falls back to SDR when the HLG preview cannot be bound', () async {
+        final AndroidCameraCameraX camera = await createHlgCamera(recorderSupportsHlg: true);
+        var calls = 0;
+        when(mockProcessCameraProvider.bindToLifecycle(any, any)).thenAnswer((_) async {
+          calls++;
+          if (calls == 1) {
+            throw PlatformException(code: 'IllegalArgumentException');
+          }
+          final mockCamera = MockCamera();
+          final mockCameraInfo = MockCameraInfo();
+          when(mockCamera.getCameraInfo()).thenAnswer((_) async => mockCameraInfo);
+          when(mockCameraInfo.getCameraState()).thenAnswer((_) async => MockLiveCameraState());
+          return mockCamera;
+        });
+
+        await camera.initializeCamera(42);
+
+        expect(previewRanges, <DynamicRangeType?>[DynamicRangeType.hlg10, null]);
+        expect(await camera.getPreviewDynamicRange(42), PreviewDynamicRange.sdr);
+        verify(previews.last.setViewSurfaceProvider(any));
+      });
+
+      test('lockCaptureOrientation moves the preview to an SDR texture', () async {
+        final AndroidCameraCameraX camera = await createHlgCamera(recorderSupportsHlg: true);
+        await camera.initializeCamera(42);
+
+        await camera.lockCaptureOrientation(42, DeviceOrientation.portraitUp);
+
+        expect(camera.previewView, isNull);
+        expect(await camera.getPreviewDynamicRange(42), PreviewDynamicRange.sdr);
+        verify(previews.last.setSurfaceProvider(any));
+        expect(videoRanges.last, isNull);
+      });
+    });
+  });
 }
 
 class TestMeteringPoint extends MeteringPoint {

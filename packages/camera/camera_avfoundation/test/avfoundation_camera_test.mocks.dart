@@ -3,6 +3,7 @@
 // Do not manually edit this file.
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
+
 import 'dart:async' as _i4;
 
 import 'package:camera_avfoundation/src/messages.g.dart' as _i2;
@@ -50,14 +51,48 @@ class MockCameraApi extends _i1.Mock implements _i2.CameraApi {
             returnValue: _i4.Future<List<_i2.PlatformCameraDescription>>.value(
               <_i2.PlatformCameraDescription>[],
             ),
-            returnValueForMissingStub: _i4.Future<List<_i2.PlatformCameraDescription>>.value(
-              <_i2.PlatformCameraDescription>[],
-            ),
+            returnValueForMissingStub:
+                _i4.Future<List<_i2.PlatformCameraDescription>>.value(
+                  <_i2.PlatformCameraDescription>[],
+                ),
           )
           as _i4.Future<List<_i2.PlatformCameraDescription>>);
 
   @override
-  _i4.Future<int> create(String? cameraName, _i2.PlatformMediaSettings? settings) =>
+  _i4.Future<List<_i2.PlatformPreviewDynamicRange>>
+  getSupportedPreviewDynamicRanges(String? cameraName) =>
+      (super.noSuchMethod(
+            Invocation.method(#getSupportedPreviewDynamicRanges, [cameraName]),
+            returnValue:
+                _i4.Future<List<_i2.PlatformPreviewDynamicRange>>.value(
+                  <_i2.PlatformPreviewDynamicRange>[],
+                ),
+            returnValueForMissingStub:
+                _i4.Future<List<_i2.PlatformPreviewDynamicRange>>.value(
+                  <_i2.PlatformPreviewDynamicRange>[],
+                ),
+          )
+          as _i4.Future<List<_i2.PlatformPreviewDynamicRange>>);
+
+  @override
+  _i4.Future<_i2.PlatformPreviewDynamicRange> getPreviewDynamicRange() =>
+      (super.noSuchMethod(
+            Invocation.method(#getPreviewDynamicRange, []),
+            returnValue: _i4.Future<_i2.PlatformPreviewDynamicRange>.value(
+              _i2.PlatformPreviewDynamicRange.sdr,
+            ),
+            returnValueForMissingStub:
+                _i4.Future<_i2.PlatformPreviewDynamicRange>.value(
+                  _i2.PlatformPreviewDynamicRange.sdr,
+                ),
+          )
+          as _i4.Future<_i2.PlatformPreviewDynamicRange>);
+
+  @override
+  _i4.Future<int> create(
+    String? cameraName,
+    _i2.PlatformMediaSettings? settings,
+  ) =>
       (super.noSuchMethod(
             Invocation.method(#create, [cameraName, settings]),
             returnValue: _i4.Future<int>.value(0),
@@ -66,7 +101,10 @@ class MockCameraApi extends _i1.Mock implements _i2.CameraApi {
           as _i4.Future<int>);
 
   @override
-  _i4.Future<void> initialize(int? cameraId, _i2.PlatformImageFormatGroup? imageFormat) =>
+  _i4.Future<void> initialize(
+    int? cameraId,
+    _i2.PlatformImageFormatGroup? imageFormat,
+  ) =>
       (super.noSuchMethod(
             Invocation.method(#initialize, [cameraId, imageFormat]),
             returnValue: _i4.Future<void>.value(),
@@ -111,7 +149,9 @@ class MockCameraApi extends _i1.Mock implements _i2.CameraApi {
           as _i4.Future<void>);
 
   @override
-  _i4.Future<void> lockCaptureOrientation(_i2.PlatformDeviceOrientation? orientation) =>
+  _i4.Future<void> lockCaptureOrientation(
+    _i2.PlatformDeviceOrientation? orientation,
+  ) =>
       (super.noSuchMethod(
             Invocation.method(#lockCaptureOrientation, [orientation]),
             returnValue: _i4.Future<void>.value(),
@@ -151,9 +191,15 @@ class MockCameraApi extends _i1.Mock implements _i2.CameraApi {
           as _i4.Future<void>);
 
   @override
-  _i4.Future<void> startVideoRecording(bool? enableStream, String? videoOutputPath) =>
+  _i4.Future<void> startVideoRecording(
+    bool? enableStream,
+    String? videoOutputPath,
+  ) =>
       (super.noSuchMethod(
-            Invocation.method(#startVideoRecording, [enableStream, videoOutputPath]),
+            Invocation.method(#startVideoRecording, [
+              enableStream,
+              videoOutputPath,
+            ]),
             returnValue: _i4.Future<void>.value(),
             returnValueForMissingStub: _i4.Future<void>.value(),
           )
@@ -164,10 +210,16 @@ class MockCameraApi extends _i1.Mock implements _i2.CameraApi {
       (super.noSuchMethod(
             Invocation.method(#stopVideoRecording, []),
             returnValue: _i4.Future<String>.value(
-              _i3.dummyValue<String>(this, Invocation.method(#stopVideoRecording, [])),
+              _i3.dummyValue<String>(
+                this,
+                Invocation.method(#stopVideoRecording, []),
+              ),
             ),
             returnValueForMissingStub: _i4.Future<String>.value(
-              _i3.dummyValue<String>(this, Invocation.method(#stopVideoRecording, [])),
+              _i3.dummyValue<String>(
+                this,
+                Invocation.method(#stopVideoRecording, []),
+              ),
             ),
           )
           as _i4.Future<String>);
@@ -290,7 +342,9 @@ class MockCameraApi extends _i1.Mock implements _i2.CameraApi {
           as _i4.Future<void>);
 
   @override
-  _i4.Future<void> setVideoStabilizationMode(_i2.PlatformVideoStabilizationMode? mode) =>
+  _i4.Future<void> setVideoStabilizationMode(
+    _i2.PlatformVideoStabilizationMode? mode,
+  ) =>
       (super.noSuchMethod(
             Invocation.method(#setVideoStabilizationMode, [mode]),
             returnValue: _i4.Future<void>.value(),
@@ -299,7 +353,9 @@ class MockCameraApi extends _i1.Mock implements _i2.CameraApi {
           as _i4.Future<void>);
 
   @override
-  _i4.Future<bool> isVideoStabilizationModeSupported(_i2.PlatformVideoStabilizationMode? mode) =>
+  _i4.Future<bool> isVideoStabilizationModeSupported(
+    _i2.PlatformVideoStabilizationMode? mode,
+  ) =>
       (super.noSuchMethod(
             Invocation.method(#isVideoStabilizationModeSupported, [mode]),
             returnValue: _i4.Future<bool>.value(false),
