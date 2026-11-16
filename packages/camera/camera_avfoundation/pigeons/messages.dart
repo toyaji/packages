@@ -199,6 +199,11 @@ abstract class CameraApi {
   @async
   PlatformPreviewDynamicRange getPreviewDynamicRange();
 
+  /// Returns a small JPEG of the latest HLG preview frame, or null if the
+  /// preview is not HLG or no frame has arrived yet.
+  @async
+  Uint8List? capturePreviewFrame();
+
   /// Create a new camera with the given settings, and returns its ID.
   @async
   @ObjCSelector('createCameraWithName:settings:')
@@ -398,4 +403,8 @@ abstract class CameraEventApi {
   /// handling a specific HostApi call, such as during streaming.
   @ObjCSelector('reportError:')
   void error(String message);
+
+  /// Called once after the session starts, when the first preview frame
+  /// arrives.
+  void previewFrameStarted();
 }

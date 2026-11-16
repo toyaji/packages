@@ -105,6 +105,16 @@ final class MockCamera: NSObject, Camera {
 
   func attachPreviewLayer(_ layer: AVCaptureVideoPreviewLayer) {}
 
+  var capturePreviewFrameStub: ((@escaping (Data?) -> Void) -> Void)?
+
+  func capturePreviewFrame(completion: @escaping (Data?) -> Void) {
+    if let stub = capturePreviewFrameStub {
+      stub(completion)
+    } else {
+      completion(nil)
+    }
+  }
+
   func receivedImageStreamData() {
     receivedImageStreamDataStub?()
   }

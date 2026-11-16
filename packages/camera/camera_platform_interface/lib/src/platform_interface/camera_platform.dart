@@ -387,4 +387,20 @@ abstract class CameraPlatform extends PlatformInterface {
   /// The default implementation returns [PreviewDynamicRange.sdr].
   Future<PreviewDynamicRange> getPreviewDynamicRange(int cameraId) async => PreviewDynamicRange.sdr;
 
+  /// Returns a small JPEG-encoded image of the latest preview frame, or `null`
+  /// if none is available.
+  ///
+  /// A preview shown in a platform view, such as an HDR preview, cannot be
+  /// captured with `RenderRepaintBoundary.toImage`. This lets an app show the
+  /// last frame while the camera is reconfigured.
+  ///
+  /// The default implementation returns `null`.
+  Future<Uint8List?> capturePreviewFrame(int cameraId) async => null;
+
+  /// The camera preview showed its first frame after the camera was
+  /// initialized.
+  ///
+  /// The default implementation returns an empty stream.
+  Stream<PreviewFrameStartedEvent> onPreviewFrameStarted(int cameraId) =>
+      const Stream<PreviewFrameStartedEvent>.empty();
 }

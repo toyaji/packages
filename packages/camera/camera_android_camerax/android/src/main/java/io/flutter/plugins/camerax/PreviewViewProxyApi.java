@@ -61,4 +61,12 @@ class PreviewViewProxyApi extends PigeonApiPreviewView {
   public Preview.SurfaceProvider getSurfaceProvider(@NonNull PreviewView pigeonInstance) {
     return pigeonInstance.getSurfaceProvider();
   }
+
+  @NonNull
+  @Override
+  public LiveDataProxyApi.LiveDataWrapper getPreviewStreamState(
+      @NonNull PreviewView pigeonInstance) {
+    return new LiveDataProxyApi.LiveDataWrapper(
+        pigeonInstance.getPreviewStreamState(), LiveDataSupportedType.PREVIEW_VIEW_STREAM_STATE);
+  }
 }

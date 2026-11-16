@@ -103,6 +103,13 @@ final class DefaultCamera: NSObject, Camera {
   /// Used to deliver the latest pixel buffer to the flutter engine via the `copyPixelBuffer` API.
   private var latestPixelBuffer: CVPixelBuffer?
 
+  /// The latest HLG frame, kept for `capturePreviewFrame`. Accessed on
+  /// `pixelBufferSynchronizationQueue`.
+  private var latestHDRFrame: CVPixelBuffer?
+
+  /// Whether `previewFrameStarted` was sent since the last `start()`.
+  private var isPreviewFrameStartedReported = false
+
   /// The layer that renders the HLG preview, if the platform view attached one.
   private weak var hdrPreviewLayer: AVCaptureVideoPreviewLayer?
   private var hdrPreviewConnection: AVCaptureConnection?
@@ -488,6 +495,37 @@ final class DefaultCamera: NSObject, Camera {
     appliedVideoFormat = format
   }
 
+  func capturePreviewFrame(completion: @escaping (Data?) -> Void) {
+    var frame: CVPixelBuffer?
+    pixelBufferSynchronizationQueue.sync {
+      frame = latestHDRFrame
+    }
+    guard let frame, previewDynamicRange == .hlg10 else {
+      completion(nil)
+      return
+    }
+    // Encoding runs off the capture session queue so frame delivery is not delayed.
+    photoIOQueue.async {
+      completion(DefaultCamera.makePreviewJPEG(from: frame))
+    }
+  }
+
+  /// Encodes `pixelBuffer` as an sRGB JPEG whose short side is at most `shortSide` pixels.
+  static func makePreviewJPEG(
+    from pixelBuffer: CVPixelBuffer, shortSide: CGFloat = 360, quality: CGFloat = 0.8
+  ) -> Data? {
+    let image = CIImage(cvPixelBuffer: pixelBuffer)
+    let extent = image.extent
+    let scale = min(1, shortSide / min(extent.width, extent.height))
+    let scaled = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+    guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
+    return previewFrameContext.jpegRepresentation(
+      of: scaled, colorSpace: colorSpace,
+      options: [kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: quality])
+  }
+
+  private static let previewFrameContext = CIContext()
+
   func attachPreviewLayer(_ layer: AVCaptureVideoPreviewLayer) {
     guard let session = videoCaptureSession as? AVCaptureSession,
       let port = captureVideoInput.ports.first(where: { $0.mediaType == .video })
@@ -626,6 +664,7 @@ final class DefaultCamera: NSObject, Camera {
   }
 
   func start() {
+    isPreviewFrameStartedReported = false
     configureMaxPhotoDimensions()
 
     videoCaptureSession.startRunning()
@@ -1568,6 +1607,17 @@ final class DefaultCamera: NSObject, Camera {
             latestPixelBuffer = newBuffer
           }
           onFrameAvailable?()
+        } else {
+          pixelBufferSynchronizationQueue.sync {
+            latestHDRFrame = newBuffer
+          }
+        }
+
+        if !isPreviewFrameStartedReported {
+          isPreviewFrameStartedReported = true
+          ensureToRunOnMainQueue { [weak self] in
+            self?.dartAPI?.previewFrameStarted { _ in }
+          }
         }
       }
     }

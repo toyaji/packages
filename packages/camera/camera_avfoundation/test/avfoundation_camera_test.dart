@@ -279,6 +279,17 @@ void main() {
       await streamQueue.cancel();
     });
 
+    test('Should receive preview frame started events', () async {
+      final streamQueue = StreamQueue<PreviewFrameStartedEvent>(
+        camera.onPreviewFrameStarted(cameraId),
+      );
+
+      camera.hostCameraHandlers[cameraId]!.previewFrameStarted();
+
+      expect(await streamQueue.next, PreviewFrameStartedEvent(cameraId));
+      await streamQueue.cancel();
+    });
+
     test('Should receive device orientation change events', () async {
       // Act
       final Stream<DeviceOrientationChangedEvent> eventStream = camera.onDeviceOrientationChanged();
@@ -886,6 +897,29 @@ void main() {
       ).thenAnswer((_) async => PlatformPreviewDynamicRange.hlg10);
 
       expect(await camera.getPreviewDynamicRange(1), PreviewDynamicRange.hlg10);
+    });
+  });
+
+  group('preview frame', () {
+    late AVFoundationCamera camera;
+    late MockCameraApi mockApi;
+
+    setUp(() {
+      mockApi = MockCameraApi();
+      camera = AVFoundationCamera(api: mockApi);
+    });
+
+    test('capturePreviewFrame returns the host bytes', () async {
+      final frame = Uint8List.fromList(<int>[0xFF, 0xD8, 0xFF]);
+      when(mockApi.capturePreviewFrame()).thenAnswer((_) async => frame);
+
+      expect(await camera.capturePreviewFrame(1), frame);
+    });
+
+    test('capturePreviewFrame converts host errors', () async {
+      when(mockApi.capturePreviewFrame()).thenThrow(PlatformException(code: 'error'));
+
+      expect(() => camera.capturePreviewFrame(1), throwsA(isA<CameraException>()));
     });
   });
 }

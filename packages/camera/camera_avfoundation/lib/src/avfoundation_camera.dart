@@ -174,6 +174,11 @@ class AVFoundationCamera extends CameraPlatform {
   }
 
   @override
+  Stream<PreviewFrameStartedEvent> onPreviewFrameStarted(int cameraId) {
+    return _cameraEvents(cameraId).whereType<PreviewFrameStartedEvent>();
+  }
+
+  @override
   Stream<VideoRecordedEvent> onVideoRecordedEvent(int cameraId) {
     return _cameraEvents(cameraId).whereType<VideoRecordedEvent>();
   }
@@ -477,6 +482,15 @@ class AVFoundationCamera extends CameraPlatform {
   }
 
   @override
+  Future<Uint8List?> capturePreviewFrame(int cameraId) async {
+    try {
+      return await _hostApi.capturePreviewFrame();
+    } on PlatformException catch (e) {
+      throw CameraException(e.code, e.message);
+    }
+  }
+
+  @override
   Widget buildPreview(int cameraId) {
     if (_appliedPreviewRanges[cameraId] == PreviewDynamicRange.hlg10) {
       // An HLG preview is rendered by an AVCaptureVideoPreviewLayer, since
@@ -721,6 +735,11 @@ class HostCameraMessageHandler implements CameraEventApi {
   @override
   void error(String message) {
     streamController.add(CameraErrorEvent(cameraId, message));
+  }
+
+  @override
+  void previewFrameStarted() {
+    streamController.add(PreviewFrameStartedEvent(cameraId));
   }
 
   @override

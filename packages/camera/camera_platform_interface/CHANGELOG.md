@@ -1,3 +1,7 @@
+## 2.17.0
+
+* Adds `capturePreviewFrame` and `onPreviewFrameStarted` for previews shown in a platform view.
+
 ## 2.16.0
 
 * Adds `MediaSettings.previewDynamicRange`, `getSupportedPreviewDynamicRanges`, and `getPreviewDynamicRange` for an HDR (10-bit HLG) camera preview.

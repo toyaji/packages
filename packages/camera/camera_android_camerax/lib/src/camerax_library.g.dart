@@ -272,6 +272,13 @@ class PigeonOverrides {
   static Future<ProcessCameraProvider> Function()?
       processCameraProvider_getInstance;
 
+  /// Overrides [PreviewViewUtils.capturePreviewFrame].
+  static Future<Uint8List?> Function(
+    PreviewView,
+    int,
+    int,
+  )? previewViewUtils_capturePreviewFrame;
+
   /// Overrides [Recorder.getVideoCapabilities].
   static Future<VideoCapabilities> Function(CameraInfo)?
       recorder_getVideoCapabilities;
@@ -302,6 +309,7 @@ class PigeonOverrides {
     deviceOrientationManager_new = null;
     preview_new = null;
     previewView_new = null;
+    previewViewUtils_capturePreviewFrame = null;
     videoCapture_withOutput = null;
     recorder_new = null;
     recorder_getVideoCapabilities = null;
@@ -465,6 +473,7 @@ class PigeonInstanceManager {
     Preview.pigeon_setUpMessageHandlers(pigeon_instanceManager: instanceManager);
     PreviewSurfaceProvider.pigeon_setUpMessageHandlers(pigeon_instanceManager: instanceManager);
     PreviewView.pigeon_setUpMessageHandlers(pigeon_instanceManager: instanceManager);
+    PreviewViewUtils.pigeon_setUpMessageHandlers(pigeon_instanceManager: instanceManager);
     VideoCapture.pigeon_setUpMessageHandlers(pigeon_instanceManager: instanceManager);
     VideoOutput.pigeon_setUpMessageHandlers(pigeon_instanceManager: instanceManager);
     Recorder.pigeon_setUpMessageHandlers(pigeon_instanceManager: instanceManager);
@@ -798,6 +807,15 @@ enum CameraStateType {
 enum LiveDataSupportedType {
   cameraState,
   zoomState,
+  previewViewStreamState,
+}
+
+/// The state of the preview stream of a `PreviewView`.
+///
+/// See https://developer.android.com/reference/androidx/camera/view/PreviewView.StreamState.
+enum PreviewViewStreamState {
+  idle,
+  streaming,
 }
 
 /// The dynamic ranges that this plugin can request.
@@ -996,35 +1014,38 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is LiveDataSupportedType) {
       buffer.putUint8(132);
       writeValue(buffer, value.index);
-    }    else if (value is DynamicRangeType) {
+    }    else if (value is PreviewViewStreamState) {
       buffer.putUint8(133);
       writeValue(buffer, value.index);
-    }    else if (value is PreviewViewImplementationMode) {
+    }    else if (value is DynamicRangeType) {
       buffer.putUint8(134);
       writeValue(buffer, value.index);
-    }    else if (value is PreviewViewScaleType) {
+    }    else if (value is PreviewViewImplementationMode) {
       buffer.putUint8(135);
       writeValue(buffer, value.index);
-    }    else if (value is VideoQuality) {
+    }    else if (value is PreviewViewScaleType) {
       buffer.putUint8(136);
       writeValue(buffer, value.index);
-    }    else if (value is MeteringMode) {
+    }    else if (value is VideoQuality) {
       buffer.putUint8(137);
       writeValue(buffer, value.index);
-    }    else if (value is LensFacing) {
+    }    else if (value is MeteringMode) {
       buffer.putUint8(138);
       writeValue(buffer, value.index);
-    }    else if (value is CameraXFlashMode) {
+    }    else if (value is LensFacing) {
       buffer.putUint8(139);
       writeValue(buffer, value.index);
-    }    else if (value is ResolutionStrategyFallbackRule) {
+    }    else if (value is CameraXFlashMode) {
       buffer.putUint8(140);
       writeValue(buffer, value.index);
-    }    else if (value is AspectRatioStrategyFallbackRule) {
+    }    else if (value is ResolutionStrategyFallbackRule) {
       buffer.putUint8(141);
       writeValue(buffer, value.index);
-    }    else if (value is CameraStateErrorCode) {
+    }    else if (value is AspectRatioStrategyFallbackRule) {
       buffer.putUint8(142);
+      writeValue(buffer, value.index);
+    }    else if (value is CameraStateErrorCode) {
+      buffer.putUint8(143);
       writeValue(buffer, value.index);
     } else {
       super.writeValue(buffer, value);
@@ -1048,32 +1069,35 @@ class _PigeonCodec extends StandardMessageCodec {
         return value == null ? null : LiveDataSupportedType.values[value];
       case 133:
         final value = readValue(buffer) as int?;
-        return value == null ? null : DynamicRangeType.values[value];
+        return value == null ? null : PreviewViewStreamState.values[value];
       case 134:
         final value = readValue(buffer) as int?;
-        return value == null ? null : PreviewViewImplementationMode.values[value];
+        return value == null ? null : DynamicRangeType.values[value];
       case 135:
         final value = readValue(buffer) as int?;
-        return value == null ? null : PreviewViewScaleType.values[value];
+        return value == null ? null : PreviewViewImplementationMode.values[value];
       case 136:
         final value = readValue(buffer) as int?;
-        return value == null ? null : VideoQuality.values[value];
+        return value == null ? null : PreviewViewScaleType.values[value];
       case 137:
         final value = readValue(buffer) as int?;
-        return value == null ? null : MeteringMode.values[value];
+        return value == null ? null : VideoQuality.values[value];
       case 138:
         final value = readValue(buffer) as int?;
-        return value == null ? null : LensFacing.values[value];
+        return value == null ? null : MeteringMode.values[value];
       case 139:
         final value = readValue(buffer) as int?;
-        return value == null ? null : CameraXFlashMode.values[value];
+        return value == null ? null : LensFacing.values[value];
       case 140:
         final value = readValue(buffer) as int?;
-        return value == null ? null : ResolutionStrategyFallbackRule.values[value];
+        return value == null ? null : CameraXFlashMode.values[value];
       case 141:
         final value = readValue(buffer) as int?;
-        return value == null ? null : AspectRatioStrategyFallbackRule.values[value];
+        return value == null ? null : ResolutionStrategyFallbackRule.values[value];
       case 142:
+        final value = readValue(buffer) as int?;
+        return value == null ? null : AspectRatioStrategyFallbackRule.values[value];
+      case 143:
         final value = readValue(buffer) as int?;
         return value == null ? null : CameraStateErrorCode.values[value];
       default:
@@ -3948,9 +3972,138 @@ class PreviewView extends PigeonInternalProxyApiBaseClass {
     return pigeonVar_replyValue! as PreviewSurfaceProvider;
   }
 
+  /// Returns a LiveData of the state of the preview stream.
+  Future<LiveData> getPreviewStreamState() async {
+    final _PigeonInternalProxyApiBaseCodec pigeonChannelCodec =
+        _pigeonVar_codecPreviewView;
+    final BinaryMessenger? pigeonVar_binaryMessenger = pigeon_binaryMessenger;
+    const pigeonVar_channelName =
+        'dev.flutter.pigeon.camera_android_camerax.PreviewView.getPreviewStreamState';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture =
+        pigeonVar_channel.send(<Object?>[this]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return pigeonVar_replyValue! as LiveData;
+  }
+
   @override
   PreviewView pigeon_copy() {
     return PreviewView.pigeon_detached(
+      pigeon_binaryMessenger: pigeon_binaryMessenger,
+      pigeon_instanceManager: pigeon_instanceManager,
+    );
+  }
+}
+
+/// Utilities for working with [PreviewView]s.
+class PreviewViewUtils extends PigeonInternalProxyApiBaseClass {
+  /// Constructs [PreviewViewUtils] without creating the associated native object.
+  ///
+  /// This should only be used by subclasses created by this library or to
+  /// create copies for an [PigeonInstanceManager].
+  @protected
+  PreviewViewUtils.pigeon_detached({
+    super.pigeon_binaryMessenger,
+    super.pigeon_instanceManager,
+  });
+
+  static void pigeon_setUpMessageHandlers({
+    bool pigeon_clearHandlers = false,
+    BinaryMessenger? pigeon_binaryMessenger,
+    PigeonInstanceManager? pigeon_instanceManager,
+    PreviewViewUtils Function()? pigeon_newInstance,
+  }) {
+    final _PigeonInternalProxyApiBaseCodec pigeonChannelCodec =
+        _PigeonInternalProxyApiBaseCodec(
+            pigeon_instanceManager ?? PigeonInstanceManager.instance);
+    final BinaryMessenger? binaryMessenger = pigeon_binaryMessenger;
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.camera_android_camerax.PreviewViewUtils.pigeon_newInstance',
+          pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (pigeon_clearHandlers) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final int arg_pigeon_instanceIdentifier = args[0]! as int;
+          try {
+            (pigeon_instanceManager ?? PigeonInstanceManager.instance)
+                .addHostCreatedInstance(
+              pigeon_newInstance?.call() ??
+                  PreviewViewUtils.pigeon_detached(
+                    pigeon_binaryMessenger: pigeon_binaryMessenger,
+                    pigeon_instanceManager: pigeon_instanceManager,
+                  ),
+              arg_pigeon_instanceIdentifier,
+            );
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          } catch (e) {
+            return wrapResponse(
+                error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+  }
+
+  /// Returns the content of [previewView] as a JPEG whose short side is at
+  /// most [maxShortSide] pixels, or null if the view shows no frame.
+  ///
+  /// Uses `PreviewView.getBitmap()`.
+  static Future<Uint8List?> capturePreviewFrame(
+    PreviewView previewView,
+    int maxShortSide,
+    int jpegQuality, {
+    BinaryMessenger? pigeon_binaryMessenger,
+    PigeonInstanceManager? pigeon_instanceManager,
+  }) async {
+    if (PigeonOverrides.previewViewUtils_capturePreviewFrame != null) {
+      return PigeonOverrides.previewViewUtils_capturePreviewFrame!(
+        previewView,
+        maxShortSide,
+        jpegQuality,
+      );
+    }
+    final _PigeonInternalProxyApiBaseCodec pigeonChannelCodec =
+        _PigeonInternalProxyApiBaseCodec(
+            pigeon_instanceManager ?? PigeonInstanceManager.instance);
+    final BinaryMessenger? pigeonVar_binaryMessenger = pigeon_binaryMessenger;
+    const pigeonVar_channelName =
+        'dev.flutter.pigeon.camera_android_camerax.PreviewViewUtils.capturePreviewFrame';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel
+        .send(<Object?>[previewView, maxShortSide, jpegQuality]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
+    return pigeonVar_replyValue as Uint8List?;
+  }
+
+  @override
+  PreviewViewUtils pigeon_copy() {
+    return PreviewViewUtils.pigeon_detached(
       pigeon_binaryMessenger: pigeon_binaryMessenger,
       pigeon_instanceManager: pigeon_instanceManager,
     );

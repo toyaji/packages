@@ -46,6 +46,16 @@ class AndroidCameraCameraX extends CameraPlatform {
   /// [camera] instance.
   LiveData<CameraState>? liveCameraState;
 
+  /// The [LiveData] of the stream state of [previewView], observed to report
+  /// [PreviewFrameStartedEvent]s.
+  LiveData<PreviewViewStreamState>? livePreviewStreamState;
+
+  /// The short side, in pixels, of the frame returned by [capturePreviewFrame].
+  static const int previewFrameMaxShortSide = 360;
+
+  /// The JPEG quality of the frame returned by [capturePreviewFrame].
+  static const int previewFrameJpegQuality = 80;
+
   /// The [Preview] instance that can be configured to present a live camera preview.
   @visibleForTesting
   Preview? preview;
@@ -632,6 +642,7 @@ class AndroidCameraCameraX extends CameraPlatform {
       ]);
     }
     await _updateCameraInfoAndLiveCameraState(_flutterSurfaceTextureId);
+    await _observePreviewStream(cameraId);
     previewInitiallyBound = true;
     _previewIsPaused = false;
 
@@ -669,6 +680,8 @@ class AndroidCameraCameraX extends CameraPlatform {
       await preview?.releaseSurfaceProvider();
     }
     previewView = null;
+    await livePreviewStreamState?.removeObservers();
+    livePreviewStreamState = null;
     await liveCameraState?.removeObservers();
     await processCameraProvider?.unbindAll();
     await imageAnalysis?.clearAnalyzer();
@@ -699,6 +712,29 @@ class AndroidCameraCameraX extends CameraPlatform {
   @override
   Stream<CameraClosingEvent> onCameraClosing(int cameraId) {
     return _cameraEvents(cameraId).whereType<CameraClosingEvent>();
+  }
+
+  /// The preview of the camera with ID [cameraId] showed its first frame.
+  ///
+  /// Reported only for a preview shown in a `PreviewView` (an HDR preview).
+  @override
+  Stream<PreviewFrameStartedEvent> onPreviewFrameStarted(int cameraId) {
+    return _cameraEvents(cameraId).whereType<PreviewFrameStartedEvent>();
+  }
+
+  /// Returns a small JPEG of the frame shown by the `PreviewView`, or null if
+  /// the preview is not shown in a `PreviewView`.
+  @override
+  Future<Uint8List?> capturePreviewFrame(int cameraId) async {
+    final PreviewView? view = previewView;
+    if (view == null) {
+      return null;
+    }
+    return PreviewViewUtils.capturePreviewFrame(
+      view,
+      previewFrameMaxShortSide,
+      previewFrameJpegQuality,
+    );
   }
 
   /// The camera with ID [cameraId] experienced an error.
@@ -1775,6 +1811,31 @@ class AndroidCameraCameraX extends CameraPlatform {
 
   /// Creates [Observer] of the [CameraState] that will:
   ///
+  /// Reports a [PreviewFrameStartedEvent] the first time [previewView] starts
+  /// streaming after the camera was initialized.
+  Future<void> _observePreviewStream(int cameraId) async {
+    await livePreviewStreamState?.removeObservers();
+    livePreviewStreamState = null;
+    final PreviewView? view = previewView;
+    if (view == null) {
+      return;
+    }
+    final weakThis = WeakReference<AndroidCameraCameraX>(this);
+    var reported = false;
+    livePreviewStreamState = await view.getPreviewStreamState() as LiveData<PreviewViewStreamState>;
+    await livePreviewStreamState!.observe(
+      Observer<PreviewViewStreamState>(
+        onChanged: (_, PreviewViewStreamState state) {
+          if (reported || state != PreviewViewStreamState.streaming) {
+            return;
+          }
+          reported = true;
+          weakThis.target?.cameraEventStreamController.add(PreviewFrameStartedEvent(cameraId));
+        },
+      ),
+    );
+  }
+
   ///  * Send a [CameraClosingEvent] if the [CameraState] indicates that the
   ///    camera has begun to close.
   ///  * Send a [CameraErrorEvent] if the [CameraState] indicates that the

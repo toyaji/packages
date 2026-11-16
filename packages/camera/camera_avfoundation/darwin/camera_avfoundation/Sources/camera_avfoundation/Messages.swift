@@ -836,6 +836,9 @@ protocol CameraApi {
   /// current camera (`sdr` if a requested range had to be dropped).
   func getPreviewDynamicRange(
     completion: @escaping (Result<PlatformPreviewDynamicRange, Error>) -> Void)
+  /// Returns a small JPEG of the latest HLG preview frame, or null if the
+  /// preview is not HLG or no frame has arrived yet.
+  func capturePreviewFrame(completion: @escaping (Result<FlutterStandardTypedData?, Error>) -> Void)
   /// Create a new camera with the given settings, and returns its ID.
   func create(
     cameraName: String, settings: PlatformMediaSettings,
@@ -999,6 +1002,25 @@ class CameraApiSetup {
       }
     } else {
       getPreviewDynamicRangeChannel.setMessageHandler(nil)
+    }
+    /// Returns a small JPEG of the latest HLG preview frame, or null if the
+    /// preview is not HLG or no frame has arrived yet.
+    let capturePreviewFrameChannel = FlutterBasicMessageChannel(
+      name: "dev.flutter.pigeon.camera_avfoundation.CameraApi.capturePreviewFrame\(channelSuffix)",
+      binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      capturePreviewFrameChannel.setMessageHandler { _, reply in
+        api.capturePreviewFrame { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      capturePreviewFrameChannel.setMessageHandler(nil)
     }
     /// Create a new camera with the given settings, and returns its ID.
     let createChannel = FlutterBasicMessageChannel(
@@ -1805,6 +1827,9 @@ protocol CameraEventApiProtocol {
   /// This should be used for errors that occur outside of the context of
   /// handling a specific HostApi call, such as during streaming.
   func error(message messageArg: String, completion: @escaping (Result<Void, PigeonError>) -> Void)
+  /// Called once after the session starts, when the first preview frame
+  /// arrives.
+  func previewFrameStarted(completion: @escaping (Result<Void, PigeonError>) -> Void)
 }
 class CameraEventApi: CameraEventApiProtocol {
   private let binaryMessenger: FlutterBinaryMessenger
@@ -1851,6 +1876,28 @@ class CameraEventApi: CameraEventApiProtocol {
     let channel = FlutterBasicMessageChannel(
       name: channelName, binaryMessenger: binaryMessenger, codec: codec)
     channel.sendMessage([messageArg] as [Any?]) { response in
+      guard let listResponse = response as? [Any?] else {
+        completion(.failure(createConnectionError(withChannelName: channelName)))
+        return
+      }
+      if listResponse.count > 1 {
+        let code: String = listResponse[0] as! String
+        let message: String? = nilOrValue(listResponse[1])
+        let details: String? = nilOrValue(listResponse[2])
+        completion(.failure(PigeonError(code: code, message: message, details: details)))
+      } else {
+        completion(.success(()))
+      }
+    }
+  }
+  /// Called once after the session starts, when the first preview frame
+  /// arrives.
+  func previewFrameStarted(completion: @escaping (Result<Void, PigeonError>) -> Void) {
+    let channelName: String =
+      "dev.flutter.pigeon.camera_avfoundation.CameraEventApi.previewFrameStarted\(messageChannelSuffix)"
+    let channel = FlutterBasicMessageChannel(
+      name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+    channel.sendMessage(nil) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName: channelName)))
         return

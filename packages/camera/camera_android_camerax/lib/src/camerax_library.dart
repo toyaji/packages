@@ -50,6 +50,11 @@ void setUpGenerics({BinaryMessenger? pigeonBinaryMessenger}) {
             type: type,
             pigeon_binaryMessenger: pigeonBinaryMessenger,
           );
+        case camerax.LiveDataSupportedType.previewViewStreamState:
+          return LiveData<camerax.PreviewViewStreamState>.detached(
+            type: type,
+            pigeon_binaryMessenger: pigeonBinaryMessenger,
+          );
       }
     },
   );

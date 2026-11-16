@@ -820,6 +820,27 @@ class CameraApi {
     return pigeonVar_replyValue! as PlatformPreviewDynamicRange;
   }
 
+  /// Returns a small JPEG of the latest HLG preview frame, or null if the
+  /// preview is not HLG or no frame has arrived yet.
+  Future<Uint8List?> capturePreviewFrame() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.camera_avfoundation.CameraApi.capturePreviewFrame$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+    return pigeonVar_replyValue as Uint8List?;
+  }
+
   /// Create a new camera with the given settings, and returns its ID.
   Future<int> create(String cameraName, PlatformMediaSettings settings) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.camera_avfoundation.CameraApi.create$pigeonVar_messageChannelSuffix';
@@ -1556,6 +1577,10 @@ abstract class CameraEventApi {
   /// handling a specific HostApi call, such as during streaming.
   void error(String message);
 
+  /// Called once after the session starts, when the first preview frame
+  /// arrives.
+  void previewFrameStarted();
+
   static void setUp(CameraEventApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
     {
@@ -1591,6 +1616,25 @@ abstract class CameraEventApi {
           final String arg_message = args[0]! as String;
           try {
             api.error(arg_message);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.camera_avfoundation.CameraEventApi.previewFrameStarted$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          try {
+            api.previewFrameStarted();
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

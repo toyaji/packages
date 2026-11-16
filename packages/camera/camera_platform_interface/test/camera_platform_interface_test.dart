@@ -381,6 +381,18 @@ void main() {
       expect(await cameraPlatform.getPreviewDynamicRange(1), PreviewDynamicRange.sdr);
     });
 
+    test('Default implementation of capturePreviewFrame() returns null', () async {
+      final cameraPlatform = ExtendsCameraPlatform();
+
+      expect(await cameraPlatform.capturePreviewFrame(1), isNull);
+    });
+
+    test('Default implementation of onPreviewFrameStarted() is an empty stream', () async {
+      final cameraPlatform = ExtendsCameraPlatform();
+
+      expect(await cameraPlatform.onPreviewFrameStarted(1).isEmpty, isTrue);
+    });
+
     test('Default implementation of isZeroShutterLagSupported() should return false', () async {
       // Arrange
       final cameraPlatform = ExtendsCameraPlatform();

@@ -4,6 +4,7 @@
 
 import AVFoundation
 import Flutter
+import ImageIO
 import XCTest
 
 @testable import camera_avfoundation
@@ -218,6 +219,32 @@ final class HDRPreviewTests: XCTestCase {
     #else
       throw XCTSkip("Deferred start requires the iOS 26 SDK.")
     #endif
+  }
+
+  // MARK: Preview frame
+
+  func testCapturePreviewFrameIsNil_whenThePreviewIsSDR() {
+    let device = makeDevice(formats: [makeFormat(yuv420, 4032, 3024), makeHLGFormat(1920, 1440)])
+    let camera = makeCamera(device: device, range: .sdr)
+
+    let done = expectation(description: "frame")
+    camera.capturePreviewFrame { data in
+      XCTAssertNil(data)
+      done.fulfill()
+    }
+    waitForExpectations(timeout: 5)
+  }
+
+  func testPreviewJPEGIsScaledToTheShortSide() throws {
+    var buffer: CVPixelBuffer?
+    CVPixelBufferCreate(nil, 1920, 1440, kCVPixelFormatType_32BGRA, nil, &buffer)
+    let jpeg = try XCTUnwrap(DefaultCamera.makePreviewJPEG(from: buffer!, shortSide: 360))
+
+    let source = try XCTUnwrap(CGImageSourceCreateWithData(jpeg as CFData, nil))
+    let properties = try XCTUnwrap(
+      CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])
+    XCTAssertEqual(properties[kCGImagePropertyPixelWidth] as? Int, 480)
+    XCTAssertEqual(properties[kCGImagePropertyPixelHeight] as? Int, 360)
   }
 
   // MARK: Video settings

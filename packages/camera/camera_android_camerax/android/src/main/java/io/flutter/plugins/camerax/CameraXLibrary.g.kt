@@ -542,6 +542,12 @@ abstract class CameraXLibraryPigeonProxyApiRegistrar(val binaryMessenger: Binary
   abstract fun getPigeonApiPreviewView(): PigeonApiPreviewView
 
   /**
+   * An implementation of [PigeonApiPreviewViewUtils] used to add a new Dart instance of
+   * `PreviewViewUtils` to the Dart `InstanceManager`.
+   */
+  abstract fun getPigeonApiPreviewViewUtils(): PigeonApiPreviewViewUtils
+
+  /**
    * An implementation of [PigeonApiVideoCapture] used to add a new Dart instance of `VideoCapture`
    * to the Dart `InstanceManager`.
    */
@@ -789,6 +795,7 @@ abstract class CameraXLibraryPigeonProxyApiRegistrar(val binaryMessenger: Binary
         binaryMessenger, getPigeonApiDeviceOrientationManager())
     PigeonApiPreview.setUpMessageHandlers(binaryMessenger, getPigeonApiPreview())
     PigeonApiPreviewView.setUpMessageHandlers(binaryMessenger, getPigeonApiPreviewView())
+    PigeonApiPreviewViewUtils.setUpMessageHandlers(binaryMessenger, getPigeonApiPreviewViewUtils())
     PigeonApiVideoCapture.setUpMessageHandlers(binaryMessenger, getPigeonApiVideoCapture())
     PigeonApiRecorder.setUpMessageHandlers(binaryMessenger, getPigeonApiRecorder())
     PigeonApiVideoCapabilities.setUpMessageHandlers(
@@ -845,6 +852,7 @@ abstract class CameraXLibraryPigeonProxyApiRegistrar(val binaryMessenger: Binary
     PigeonApiDeviceOrientationManager.setUpMessageHandlers(binaryMessenger, null)
     PigeonApiPreview.setUpMessageHandlers(binaryMessenger, null)
     PigeonApiPreviewView.setUpMessageHandlers(binaryMessenger, null)
+    PigeonApiPreviewViewUtils.setUpMessageHandlers(binaryMessenger, null)
     PigeonApiVideoCapture.setUpMessageHandlers(binaryMessenger, null)
     PigeonApiRecorder.setUpMessageHandlers(binaryMessenger, null)
     PigeonApiVideoCapabilities.setUpMessageHandlers(binaryMessenger, null)
@@ -909,6 +917,7 @@ private class CameraXLibraryPigeonProxyApiBaseCodec(
         value is AspectRatio ||
         value is CameraStateType ||
         value is LiveDataSupportedType ||
+        value is PreviewViewStreamState ||
         value is DynamicRangeType ||
         value is PreviewViewImplementationMode ||
         value is PreviewViewScaleType ||
@@ -1048,6 +1057,12 @@ private class CameraXLibraryPigeonProxyApiBaseCodec(
       registrar.getPigeonApiPreviewView().pigeon_newInstance(value) {
         if (it.isFailure) {
           logNewInstanceFailure("PreviewView", value, it.exceptionOrNull())
+        }
+      }
+    } else if (value is PreviewViewUtils) {
+      registrar.getPigeonApiPreviewViewUtils().pigeon_newInstance(value) {
+        if (it.isFailure) {
+          logNewInstanceFailure("PreviewViewUtils", value, it.exceptionOrNull())
         }
       }
     } else if (value is androidx.camera.video.VideoCapture<*>) {
@@ -1374,10 +1389,27 @@ enum class CameraStateType(val raw: Int) {
 /** The types (T) properly wrapped to be used as a `LiveData<T>`. */
 enum class LiveDataSupportedType(val raw: Int) {
   CAMERA_STATE(0),
-  ZOOM_STATE(1);
+  ZOOM_STATE(1),
+  PREVIEW_VIEW_STREAM_STATE(2);
 
   companion object {
     fun ofRaw(raw: Int): LiveDataSupportedType? {
+      return values().firstOrNull { it.raw == raw }
+    }
+  }
+}
+
+/**
+ * The state of the preview stream of a `PreviewView`.
+ *
+ * See https://developer.android.com/reference/androidx/camera/view/PreviewView.StreamState.
+ */
+enum class PreviewViewStreamState(val raw: Int) {
+  IDLE(0),
+  STREAMING(1);
+
+  companion object {
+    fun ofRaw(raw: Int): PreviewViewStreamState? {
       return values().firstOrNull { it.raw == raw }
     }
   }
@@ -1667,37 +1699,40 @@ private open class CameraXLibraryPigeonCodec : StandardMessageCodec() {
         return (readValue(buffer) as Long?)?.let { LiveDataSupportedType.ofRaw(it.toInt()) }
       }
       133.toByte() -> {
-        return (readValue(buffer) as Long?)?.let { DynamicRangeType.ofRaw(it.toInt()) }
+        return (readValue(buffer) as Long?)?.let { PreviewViewStreamState.ofRaw(it.toInt()) }
       }
       134.toByte() -> {
-        return (readValue(buffer) as Long?)?.let { PreviewViewImplementationMode.ofRaw(it.toInt()) }
+        return (readValue(buffer) as Long?)?.let { DynamicRangeType.ofRaw(it.toInt()) }
       }
       135.toByte() -> {
-        return (readValue(buffer) as Long?)?.let { PreviewViewScaleType.ofRaw(it.toInt()) }
+        return (readValue(buffer) as Long?)?.let { PreviewViewImplementationMode.ofRaw(it.toInt()) }
       }
       136.toByte() -> {
-        return (readValue(buffer) as Long?)?.let { VideoQuality.ofRaw(it.toInt()) }
+        return (readValue(buffer) as Long?)?.let { PreviewViewScaleType.ofRaw(it.toInt()) }
       }
       137.toByte() -> {
-        return (readValue(buffer) as Long?)?.let { MeteringMode.ofRaw(it.toInt()) }
+        return (readValue(buffer) as Long?)?.let { VideoQuality.ofRaw(it.toInt()) }
       }
       138.toByte() -> {
-        return (readValue(buffer) as Long?)?.let { LensFacing.ofRaw(it.toInt()) }
+        return (readValue(buffer) as Long?)?.let { MeteringMode.ofRaw(it.toInt()) }
       }
       139.toByte() -> {
-        return (readValue(buffer) as Long?)?.let { CameraXFlashMode.ofRaw(it.toInt()) }
+        return (readValue(buffer) as Long?)?.let { LensFacing.ofRaw(it.toInt()) }
       }
       140.toByte() -> {
+        return (readValue(buffer) as Long?)?.let { CameraXFlashMode.ofRaw(it.toInt()) }
+      }
+      141.toByte() -> {
         return (readValue(buffer) as Long?)?.let {
           ResolutionStrategyFallbackRule.ofRaw(it.toInt())
         }
       }
-      141.toByte() -> {
+      142.toByte() -> {
         return (readValue(buffer) as Long?)?.let {
           AspectRatioStrategyFallbackRule.ofRaw(it.toInt())
         }
       }
-      142.toByte() -> {
+      143.toByte() -> {
         return (readValue(buffer) as Long?)?.let { CameraStateErrorCode.ofRaw(it.toInt()) }
       }
       else -> super.readValueOfType(type, buffer)
@@ -1722,44 +1757,48 @@ private open class CameraXLibraryPigeonCodec : StandardMessageCodec() {
         stream.write(132)
         writeValue(stream, value.raw.toLong())
       }
-      is DynamicRangeType -> {
+      is PreviewViewStreamState -> {
         stream.write(133)
         writeValue(stream, value.raw.toLong())
       }
-      is PreviewViewImplementationMode -> {
+      is DynamicRangeType -> {
         stream.write(134)
         writeValue(stream, value.raw.toLong())
       }
-      is PreviewViewScaleType -> {
+      is PreviewViewImplementationMode -> {
         stream.write(135)
         writeValue(stream, value.raw.toLong())
       }
-      is VideoQuality -> {
+      is PreviewViewScaleType -> {
         stream.write(136)
         writeValue(stream, value.raw.toLong())
       }
-      is MeteringMode -> {
+      is VideoQuality -> {
         stream.write(137)
         writeValue(stream, value.raw.toLong())
       }
-      is LensFacing -> {
+      is MeteringMode -> {
         stream.write(138)
         writeValue(stream, value.raw.toLong())
       }
-      is CameraXFlashMode -> {
+      is LensFacing -> {
         stream.write(139)
         writeValue(stream, value.raw.toLong())
       }
-      is ResolutionStrategyFallbackRule -> {
+      is CameraXFlashMode -> {
         stream.write(140)
         writeValue(stream, value.raw.toLong())
       }
-      is AspectRatioStrategyFallbackRule -> {
+      is ResolutionStrategyFallbackRule -> {
         stream.write(141)
         writeValue(stream, value.raw.toLong())
       }
-      is CameraStateErrorCode -> {
+      is AspectRatioStrategyFallbackRule -> {
         stream.write(142)
+        writeValue(stream, value.raw.toLong())
+      }
+      is CameraStateErrorCode -> {
+        stream.write(143)
         writeValue(stream, value.raw.toLong())
       }
       else -> super.writeValue(stream, value)
@@ -3959,6 +3998,11 @@ abstract class PigeonApiPreviewView(
       pigeon_instance: androidx.camera.view.PreviewView
   ): androidx.camera.core.Preview.SurfaceProvider
 
+  /** Returns a LiveData of the state of the preview stream. */
+  abstract fun getPreviewStreamState(
+      pigeon_instance: androidx.camera.view.PreviewView
+  ): io.flutter.plugins.camerax.LiveDataProxyApi.LiveDataWrapper
+
   companion object {
     @Suppress("LocalVariableName")
     fun setUpMessageHandlers(binaryMessenger: BinaryMessenger, api: PigeonApiPreviewView?) {
@@ -4057,6 +4101,28 @@ abstract class PigeonApiPreviewView(
           channel.setMessageHandler(null)
         }
       }
+      run {
+        val channel =
+            BasicMessageChannel<Any?>(
+                binaryMessenger,
+                "dev.flutter.pigeon.camera_android_camerax.PreviewView.getPreviewStreamState",
+                codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val pigeon_instanceArg = args[0] as androidx.camera.view.PreviewView
+            val wrapped: List<Any?> =
+                try {
+                  listOf(api.getPreviewStreamState(pigeon_instanceArg))
+                } catch (exception: Throwable) {
+                  CameraXLibraryPigeonUtils.wrapError(exception)
+                }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
     }
   }
 
@@ -4078,6 +4144,86 @@ abstract class PigeonApiPreviewView(
       val binaryMessenger = pigeonRegistrar.binaryMessenger
       val codec = pigeonRegistrar.codec
       val channelName = "dev.flutter.pigeon.camera_android_camerax.PreviewView.pigeon_newInstance"
+      val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+      channel.send(listOf(pigeon_identifierArg)) {
+        if (it is List<*>) {
+          if (it.size > 1) {
+            callback(
+                Result.failure(CameraXError(it[0] as String, it[1] as String, it[2] as String?)))
+          } else {
+            callback(Result.success(Unit))
+          }
+        } else {
+          callback(Result.failure(CameraXLibraryPigeonUtils.createConnectionError(channelName)))
+        }
+      }
+    }
+  }
+}
+/** Utilities for working with [PreviewView]s. */
+@Suppress("UNCHECKED_CAST")
+abstract class PigeonApiPreviewViewUtils(
+    open val pigeonRegistrar: CameraXLibraryPigeonProxyApiRegistrar
+) {
+  /**
+   * Returns the content of [previewView] as a JPEG whose short side is at most [maxShortSide]
+   * pixels, or null if the view shows no frame.
+   *
+   * Uses `PreviewView.getBitmap()`.
+   */
+  abstract fun capturePreviewFrame(
+      previewView: androidx.camera.view.PreviewView,
+      maxShortSide: Long,
+      jpegQuality: Long
+  ): ByteArray?
+
+  companion object {
+    @Suppress("LocalVariableName")
+    fun setUpMessageHandlers(binaryMessenger: BinaryMessenger, api: PigeonApiPreviewViewUtils?) {
+      val codec = api?.pigeonRegistrar?.codec ?: CameraXLibraryPigeonCodec()
+      run {
+        val channel =
+            BasicMessageChannel<Any?>(
+                binaryMessenger,
+                "dev.flutter.pigeon.camera_android_camerax.PreviewViewUtils.capturePreviewFrame",
+                codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val previewViewArg = args[0] as androidx.camera.view.PreviewView
+            val maxShortSideArg = args[1] as Long
+            val jpegQualityArg = args[2] as Long
+            val wrapped: List<Any?> =
+                try {
+                  listOf(api.capturePreviewFrame(previewViewArg, maxShortSideArg, jpegQualityArg))
+                } catch (exception: Throwable) {
+                  CameraXLibraryPigeonUtils.wrapError(exception)
+                }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+    }
+  }
+
+  @Suppress("LocalVariableName", "FunctionName")
+  /** Creates a Dart instance of PreviewViewUtils and attaches it to [pigeon_instanceArg]. */
+  fun pigeon_newInstance(pigeon_instanceArg: PreviewViewUtils, callback: (Result<Unit>) -> Unit) {
+    if (pigeonRegistrar.ignoreCallsToDart) {
+      callback(
+          Result.failure(
+              CameraXError("ignore-calls-error", "Calls to Dart are being ignored.", "")))
+    } else if (pigeonRegistrar.instanceManager.containsInstance(pigeon_instanceArg)) {
+      callback(Result.success(Unit))
+    } else {
+      val pigeon_identifierArg =
+          pigeonRegistrar.instanceManager.addHostCreatedInstance(pigeon_instanceArg)
+      val binaryMessenger = pigeonRegistrar.binaryMessenger
+      val codec = pigeonRegistrar.codec
+      val channelName =
+          "dev.flutter.pigeon.camera_android_camerax.PreviewViewUtils.pigeon_newInstance"
       val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
       channel.send(listOf(pigeon_identifierArg)) {
         if (it is List<*>) {
