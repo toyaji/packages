@@ -64,6 +64,7 @@ import 'android_camera_camerax_test.mocks.dart';
   customMocks: <MockSpec<Object>>[
     MockSpec<LiveData<CameraState>>(as: #MockLiveCameraState),
     MockSpec<LiveData<ZoomState>>(as: #MockLiveZoomState),
+    MockSpec<LiveData<PreviewViewStreamState>>(as: #MockLivePreviewStreamState),
   ],
 )
 void main() {
@@ -6471,6 +6472,12 @@ void main() {
       ]);
     });
 
+    test('capturePreviewFrame is null without a PreviewView', () async {
+      final camera = AndroidCameraCameraX();
+
+      expect(await camera.capturePreviewFrame(0), isNull);
+    });
+
     test('getPreviewDynamicRange defaults to sdr', () async {
       final camera = AndroidCameraCameraX();
 
@@ -6480,6 +6487,7 @@ void main() {
     group('hlg10 camera', () {
       late MockProcessCameraProvider mockProcessCameraProvider;
       late MockPreviewView mockPreviewView;
+      late MockLivePreviewStreamState mockPreviewStreamState;
       late List<DynamicRangeType?> previewRanges;
       late List<DynamicRangeType?> videoRanges;
       late List<MockPreview> previews;
@@ -6542,6 +6550,10 @@ void main() {
         when(mockPreviewView.getSurfaceProvider()).thenAnswer(
           (_) async => PreviewSurfaceProvider.pigeon_detached(),
         );
+        mockPreviewStreamState = MockLivePreviewStreamState();
+        when(
+          mockPreviewView.getPreviewStreamState(),
+        ).thenAnswer((_) async => mockPreviewStreamState);
         PigeonOverrides.previewView_new = () => mockPreviewView;
         camera.previewViewIdentifier = (PreviewView view) => 42;
 
@@ -6551,6 +6563,53 @@ void main() {
         );
         return camera;
       }
+
+      test('reports the first streaming state once as PreviewFrameStartedEvent', () async {
+        final AndroidCameraCameraX camera = await createHlgCamera(recorderSupportsHlg: true);
+        final events = <PreviewFrameStartedEvent>[];
+        final StreamSubscription<PreviewFrameStartedEvent> subscription = camera
+            .onPreviewFrameStarted(42)
+            .listen(events.add);
+
+        await camera.initializeCamera(42);
+        final observer =
+            verify(mockPreviewStreamState.observe(captureAny)).captured.single
+                as Observer<PreviewViewStreamState>;
+        observer.onChanged(observer, PreviewViewStreamState.idle);
+        observer.onChanged(observer, PreviewViewStreamState.streaming);
+        observer.onChanged(observer, PreviewViewStreamState.streaming);
+        await Future<void>.delayed(Duration.zero);
+
+        expect(events, <PreviewFrameStartedEvent>[const PreviewFrameStartedEvent(42)]);
+        await subscription.cancel();
+      });
+
+      test('dispose stops observing the preview stream state', () async {
+        final AndroidCameraCameraX camera = await createHlgCamera(recorderSupportsHlg: true);
+        await camera.initializeCamera(42);
+
+        await camera.dispose(42);
+
+        verify(mockPreviewStreamState.removeObservers());
+        expect(camera.livePreviewStreamState, isNull);
+      });
+
+      test('capturePreviewFrame returns a JPEG of the PreviewView', () async {
+        final AndroidCameraCameraX camera = await createHlgCamera(recorderSupportsHlg: true);
+        final frame = Uint8List.fromList(<int>[0xFF, 0xD8]);
+        PreviewView? capturedView;
+        int? capturedShortSide;
+        PigeonOverrides.previewViewUtils_capturePreviewFrame =
+            (PreviewView view, int maxShortSide, int jpegQuality) async {
+              capturedView = view;
+              capturedShortSide = maxShortSide;
+              return frame;
+            };
+
+        expect(await camera.capturePreviewFrame(42), frame);
+        expect(capturedView, mockPreviewView);
+        expect(capturedShortSide, AndroidCameraCameraX.previewFrameMaxShortSide);
+      });
 
       test('renders an HLG preview through a SurfaceView PreviewView', () async {
         final AndroidCameraCameraX camera = await createHlgCamera(recorderSupportsHlg: true);

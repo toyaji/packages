@@ -39,6 +39,10 @@ protocol Camera: FlutterTexture, AVCaptureVideoDataOutputSampleBufferDelegate,
   /// which cannot go through the Flutter texture. Must be called on the capture session queue.
   func attachPreviewLayer(_ layer: AVCaptureVideoPreviewLayer)
 
+  /// Calls `completion` with a small sRGB JPEG of the latest HLG preview frame, or nil if the
+  /// preview is not HLG or no frame arrived yet.
+  func capturePreviewFrame(completion: @escaping (Data?) -> Void)
+
   /// Informs the Dart side of the plugin of the current camera state and capabilities.
   func reportInitializationState()
 

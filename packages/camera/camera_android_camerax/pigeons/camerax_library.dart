@@ -108,7 +108,12 @@ enum CameraStateType {
 }
 
 /// The types (T) properly wrapped to be used as a `LiveData<T>`.
-enum LiveDataSupportedType { cameraState, zoomState }
+enum LiveDataSupportedType { cameraState, zoomState, previewViewStreamState }
+
+/// The state of the preview stream of a `PreviewView`.
+///
+/// See https://developer.android.com/reference/androidx/camera/view/PreviewView.StreamState.
+enum PreviewViewStreamState { idle, streaming }
 
 /// The dynamic ranges that this plugin can request.
 ///
@@ -525,6 +530,20 @@ abstract class PreviewView {
 
   /// Returns the `SurfaceProvider` that renders a `Preview` into this view.
   PreviewSurfaceProvider getSurfaceProvider();
+
+  /// Returns a LiveData of the state of the preview stream.
+  LiveData getPreviewStreamState();
+}
+
+/// Utilities for working with [PreviewView]s.
+@ProxyApi()
+abstract class PreviewViewUtils {
+  /// Returns the content of [previewView] as a JPEG whose short side is at
+  /// most [maxShortSide] pixels, or null if the view shows no frame.
+  ///
+  /// Uses `PreviewView.getBitmap()`.
+  @static
+  Uint8List? capturePreviewFrame(PreviewView previewView, int maxShortSide, int jpegQuality);
 }
 
 /// A use case that provides camera stream suitable for video application.

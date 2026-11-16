@@ -4,6 +4,7 @@
 
 package io.flutter.plugins.camerax;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
@@ -14,9 +15,12 @@ import static org.mockito.Mockito.when;
 
 import android.app.Activity;
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.widget.FrameLayout;
 import androidx.camera.core.Preview;
 import androidx.camera.view.PreviewView;
+import androidx.lifecycle.LiveData;
 import androidx.test.core.app.ApplicationProvider;
 import io.flutter.plugin.platform.PlatformView;
 import org.junit.Test;
@@ -70,6 +74,58 @@ public class PreviewViewTest {
     when(instance.getSurfaceProvider()).thenReturn(surfaceProvider);
 
     assertSame(surfaceProvider, api.getSurfaceProvider(instance));
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void getPreviewStreamState_wrapsTheNativeLiveData() {
+    final PigeonApiPreviewView api = new TestProxyApiRegistrar().getPigeonApiPreviewView();
+    final PreviewView instance = mock(PreviewView.class);
+    final LiveData<PreviewView.StreamState> liveData = mock(LiveData.class);
+    when(instance.getPreviewStreamState()).thenReturn(liveData);
+
+    final LiveDataProxyApi.LiveDataWrapper wrapper = api.getPreviewStreamState(instance);
+
+    assertSame(liveData, wrapper.getLiveData());
+    assertEquals(LiveDataSupportedType.PREVIEW_VIEW_STREAM_STATE, wrapper.getGenericType());
+  }
+
+  @Test
+  public void observer_convertsTheStreamStateForDart() {
+    assertEquals(
+        PreviewViewStreamState.STREAMING,
+        ObserverProxyApi.toPigeonValue(PreviewView.StreamState.STREAMING));
+    assertEquals(
+        PreviewViewStreamState.IDLE, ObserverProxyApi.toPigeonValue(PreviewView.StreamState.IDLE));
+    final Object other = new Object();
+    assertSame(other, ObserverProxyApi.toPigeonValue(other));
+  }
+
+  @Test
+  public void capturePreviewFrame_isNullWithoutAFrame() {
+    final PigeonApiPreviewViewUtils api =
+        new TestProxyApiRegistrar().getPigeonApiPreviewViewUtils();
+    final PreviewView instance = mock(PreviewView.class);
+    when(instance.getBitmap()).thenReturn(null);
+
+    assertNull(api.capturePreviewFrame(instance, 360, 80));
+  }
+
+  @Test
+  public void capturePreviewFrame_encodesAScaledJpeg() {
+    final PigeonApiPreviewViewUtils api =
+        new TestProxyApiRegistrar().getPigeonApiPreviewViewUtils();
+    final PreviewView instance = mock(PreviewView.class);
+    when(instance.getBitmap()).thenReturn(Bitmap.createBitmap(1080, 1440, Bitmap.Config.ARGB_8888));
+
+    final byte[] jpeg = api.capturePreviewFrame(instance, 360, 80);
+
+    assertNotNull(jpeg);
+    final BitmapFactory.Options options = new BitmapFactory.Options();
+    options.inJustDecodeBounds = true;
+    BitmapFactory.decodeByteArray(jpeg, 0, jpeg.length, options);
+    assertEquals(360, options.outWidth);
+    assertEquals(480, options.outHeight);
   }
 
   @Test

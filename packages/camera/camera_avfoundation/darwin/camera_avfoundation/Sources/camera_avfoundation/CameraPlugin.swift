@@ -213,6 +213,20 @@ extension CameraPlugin: CameraApi {
     }
   }
 
+  func capturePreviewFrame(
+    completion: @escaping (Result<FlutterStandardTypedData?, any Error>) -> Void
+  ) {
+    captureSessionQueue.async { [weak self] in
+      guard let camera = self?.camera else {
+        completion(.success(nil))
+        return
+      }
+      camera.capturePreviewFrame { data in
+        completion(.success(data.map { FlutterStandardTypedData(bytes: $0) }))
+      }
+    }
+  }
+
   func create(
     cameraName: String, settings: PlatformMediaSettings,
     completion: @escaping (Result<Int64, any Error>) -> Void

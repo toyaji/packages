@@ -5,6 +5,7 @@
 package io.flutter.plugins.camerax;
 
 import androidx.annotation.NonNull;
+import androidx.camera.view.PreviewView;
 import androidx.lifecycle.Observer;
 import java.util.Objects;
 
@@ -31,7 +32,7 @@ class ObserverProxyApi extends PigeonApiObserver {
                 public void run() {
                   api.onChanged(
                       ObserverImpl.this,
-                      t,
+                      toPigeonValue(t),
                       ResultCompat.asCompatCallback(
                           result -> {
                             if (result.isFailure()) {
@@ -44,6 +45,16 @@ class ObserverProxyApi extends PigeonApiObserver {
                 }
               });
     }
+  }
+
+  /** Converts values that the Pigeon codec cannot encode into their Pigeon counterparts. */
+  static Object toPigeonValue(Object value) {
+    if (value instanceof PreviewView.StreamState) {
+      return value == PreviewView.StreamState.STREAMING
+          ? PreviewViewStreamState.STREAMING
+          : PreviewViewStreamState.IDLE;
+    }
+    return value;
   }
 
   ObserverProxyApi(@NonNull ProxyApiRegistrar pigeonRegistrar) {

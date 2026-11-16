@@ -1,3 +1,8 @@
+## 0.11.3
+
+* Adds `capturePreviewFrame` and `onPreviewFrameStarted` for the HDR preview.
+* Updates minimum supported `camera_platform_interface` to 2.17.0.
+
 ## 0.11.2
 
 * Adds an HDR (10-bit HLG) preview through `MediaSettings.previewDynamicRange`.

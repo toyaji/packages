@@ -193,6 +193,15 @@ class CameraClosingEvent extends CameraEvent {
   int get hashCode => super.hashCode;
 }
 
+/// An event fired when the camera preview showed its first frame.
+///
+/// This can be noticeably later than [CameraInitializedEvent].
+class PreviewFrameStartedEvent extends CameraEvent {
+  /// Build a PreviewFrameStarted event triggered from the camera represented
+  /// by `cameraId`.
+  const PreviewFrameStartedEvent(super.cameraId);
+}
+
 /// An event fired when an error occured while operating the camera.
 class CameraErrorEvent extends CameraEvent {
   /// Build a CameraError event triggered from the camera represented by

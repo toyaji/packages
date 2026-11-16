@@ -1,3 +1,8 @@
+## 0.7.8
+
+* Adds `capturePreviewFrame` and `onPreviewFrameStarted` for the HDR (`PreviewView`) preview.
+* Updates minimum supported `camera_platform_interface` to 2.17.0.
+
 ## 0.7.7
 
 * Adds an HDR (10-bit HLG) preview through `MediaSettings.previewDynamicRange` on Android 14+.

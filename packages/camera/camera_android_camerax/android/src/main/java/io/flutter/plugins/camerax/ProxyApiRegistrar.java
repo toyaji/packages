@@ -466,4 +466,10 @@ public class ProxyApiRegistrar extends CameraXLibraryPigeonProxyApiRegistrar {
   public PigeonApiImageProxyUtils getPigeonApiImageProxyUtils() {
     return new ImageProxyUtilsProxyApi(this);
   }
+
+  @NonNull
+  @Override
+  public PigeonApiPreviewViewUtils getPigeonApiPreviewViewUtils() {
+    return new PreviewViewUtilsProxyApi(this);
+  }
 }
