@@ -222,7 +222,8 @@ final class DefaultCamera: NSObject, Camera {
     deviceOrientationProvider = configuration.deviceOrientationProvider
 
     captureDevice = videoCaptureDeviceFactory(configuration.initialCameraName)
-    flashMode = captureDevice.hasFlash ? .auto : .off
+    // [Zelly patch] Flash starts off; auto flash turns zero-shutter-lag off.
+    flashMode = .off
 
     capturePhotoOutput = AVCapturePhotoOutput()
 
@@ -956,16 +957,16 @@ final class DefaultCamera: NSObject, Camera {
       }
     }
 
-    if mediaSettings.resolutionPreset == .max {
-      if #available(iOS 16.0, *) {
-        settings.maxPhotoDimensions = capturePhotoOutput.maxPhotoDimensions
-      } else {
-        settings.isHighResolutionPhotoEnabled = true
-      }
+    // [Zelly patch] Every preset captures at the output's maximum photo size. Without this the
+    // per-shot size defaults to the smallest supported one.
+    if #available(iOS 16.0, *) {
+      settings.maxPhotoDimensions = capturePhotoOutput.maxPhotoDimensions
+    } else if mediaSettings.resolutionPreset == .max {
+      settings.isHighResolutionPhotoEnabled = true
     }
 
-    // [Zelly patch] Prioritize shot-to-shot speed over per-shot fusion processing.
-    settings.photoQualityPrioritization = .speed
+    // [Zelly patch] `.balanced` is the prioritization that zero-shutter-lag speeds up.
+    settings.photoQualityPrioritization = .balanced
 
     if flashMode != .torch {
       settings.flashMode = getAVCaptureFlashMode(for: flashMode)
@@ -1148,8 +1149,35 @@ final class DefaultCamera: NSObject, Camera {
       return
     }
     videoCaptureSession.beginConfiguration()
-    capturePhotoOutput.flutterZeroShutterLagEnabled = enabled
+    if enabled {
+      capturePhotoOutput.flutterZeroShutterLagEnabled = true
+      DefaultCamera.setResponsiveCapture(true, of: capturePhotoOutput.avOutput)
+    } else {
+      DefaultCamera.setResponsiveCapture(false, of: capturePhotoOutput.avOutput)
+      capturePhotoOutput.flutterZeroShutterLagEnabled = false
+    }
     videoCaptureSession.commitConfiguration()
+  }
+
+  /// [Zelly patch] Responsive capture and fast capture prioritization go with zero-shutter-lag.
+  /// Fast capture requires responsive capture, and responsive capture requires zero-shutter-lag.
+  private static func setResponsiveCapture(_ enabled: Bool, of output: AVCapturePhotoOutput) {
+    guard #available(iOS 17.0, macOS 14.0, *) else { return }
+    if enabled {
+      if output.isResponsiveCaptureSupported {
+        output.isResponsiveCaptureEnabled = true
+      }
+      if output.isFastCapturePrioritizationSupported {
+        output.isFastCapturePrioritizationEnabled = true
+      }
+    } else {
+      if output.isFastCapturePrioritizationEnabled {
+        output.isFastCapturePrioritizationEnabled = false
+      }
+      if output.isResponsiveCaptureEnabled {
+        output.isResponsiveCaptureEnabled = false
+      }
+    }
   }
 
   func setExposureMode(_ mode: PlatformExposureMode) {

@@ -361,13 +361,14 @@ final class PhotoCaptureTests: XCTestCase {
     waitForExpectations(timeout: 30, handler: nil)
   }
 
-  func testCaptureToFile_doesNotSetMaxPhotoDimensionsWhenResolutionPresetIsNotMax() throws {
+  // [Zelly patch] Every preset captures at the output's maximum photo size.
+  func testCaptureToFile_setsMaxPhotoDimensionsWhenResolutionPresetIsNotMax() throws {
     guard #available(iOS 16.0, *) else {
       throw XCTSkip("maxPhotoDimensions requires iOS 16.")
     }
 
     let settingsExpectation = expectation(
-      description: "Must leave maxPhotoDimensions unset for non-max presets.")
+      description: "Must set maxPhotoDimensions for non-max presets.")
     let captureSessionQueue = DispatchQueue(label: "capture_session_queue")
     captureSessionQueue.setSpecific(
       key: captureSessionQueueSpecificKey, value: captureSessionQueueSpecificValue)
@@ -376,8 +377,10 @@ final class PhotoCaptureTests: XCTestCase {
     let mockOutput = MockCapturePhotoOutput()
     mockOutput.maxPhotoDimensions = CMVideoDimensions(width: 4032, height: 3024)
     mockOutput.capturePhotoWithSettingsStub = { settings, photoDelegate in
-      XCTAssertEqual(settings.maxPhotoDimensions.width, 0)
-      XCTAssertEqual(settings.maxPhotoDimensions.height, 0)
+      XCTAssertEqual(settings.maxPhotoDimensions.width, 4032)
+      XCTAssertEqual(settings.maxPhotoDimensions.height, 3024)
+      XCTAssertEqual(settings.photoQualityPrioritization, .balanced)
+      XCTAssertEqual(settings.flashMode, .off)
       let delegate = cam.inProgressSavePhotoDelegates[settings.uniqueID]
       let ioQueue = DispatchQueue(label: "io_queue")
       ioQueue.async {
