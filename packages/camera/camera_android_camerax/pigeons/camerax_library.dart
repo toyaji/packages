@@ -511,7 +511,9 @@ abstract class Preview extends UseCase {
 ///
 /// See https://developer.android.com/reference/androidx/camera/core/Preview.SurfaceProvider.
 @ProxyApi(
-  kotlinOptions: KotlinProxyApiOptions(fullClassName: 'androidx.camera.core.Preview.SurfaceProvider'),
+  kotlinOptions: KotlinProxyApiOptions(
+    fullClassName: 'androidx.camera.core.Preview.SurfaceProvider',
+  ),
 )
 abstract class PreviewSurfaceProvider {}
 

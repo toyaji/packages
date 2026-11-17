@@ -98,6 +98,7 @@ Here is a list of all permission error codes that can be thrown:
 To show an HDR preview, check that the camera supports it and request it when creating the
 controller:
 
+<?code-excerpt "readme_hdr_preview.dart (HdrPreview)"?>
 ```dart
 final Iterable<PreviewDynamicRange> ranges = await availablePreviewDynamicRanges(description);
 final controller = CameraController(
@@ -109,9 +110,9 @@ final controller = CameraController(
 );
 ```
 
-HDR changes the whole capture session, not only the preview, and some operations switch the camera
-back to SDR. `CameraController.getPreviewDynamicRange` reports what is applied. See the platform
-implementation READMEs (`camera_android_camerax`, `camera_avfoundation`) for details.
+HDR changes the whole capture session, not only the preview, and some operations are not
+supported with it. `CameraController.getPreviewDynamicRange` reports what is applied. See the
+platform implementation READMEs (`camera_android_camerax`, `camera_avfoundation`) for details.
 
 ### Example
 

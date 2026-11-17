@@ -373,6 +373,26 @@ final class HDRPreviewTests: XCTestCase {
     XCTAssertEqual(session.sessionPreset, .hd1920x1080)
   }
 
+  // MARK: Preview view
+
+  func testPreviewViewReadsTheCameraOnTheCaptureSessionQueue() {
+    let captureSessionQueue = DispatchQueue(label: "capture_session_queue")
+    captureSessionQueue.setSpecific(
+      key: captureSessionQueueSpecificKey, value: captureSessionQueueSpecificValue)
+    let read = expectation(description: "camera read")
+    let factory = HDRPreviewViewFactory(captureSessionQueue: captureSessionQueue) {
+      XCTAssertEqual(
+        DispatchQueue.getSpecific(key: captureSessionQueueSpecificKey),
+        captureSessionQueueSpecificValue)
+      read.fulfill()
+      return nil
+    }
+
+    _ = factory.create(withFrame: .zero, viewIdentifier: 1, arguments: nil)
+
+    waitForExpectations(timeout: 5)
+  }
+
   // MARK: Video settings
 
   func testVideoSettingsAreNeverSetToAFormatThatIsNotAvailable() {
