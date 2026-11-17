@@ -19,6 +19,12 @@ enum FormatUtils {
       && format.flutterSupportedColorSpaces.contains(.HLG_BT2020)
   }
 
+  /// Returns whether the format supports the HLG BT.2020 color space, which only 10-bit formats do.
+  static func supportsHLGColorSpace(_ format: CaptureDeviceFormat) -> Bool {
+    guard #available(iOS 14.1, *) else { return false }
+    return format.flutterSupportedColorSpaces.contains(.HLG_BT2020)
+  }
+
   /// Sets the HLG BT.2020 color space. Only reached after `isHLGCapable` returned true, which
   /// requires iOS 14.1.
   static func setHLGColorSpace(on device: CaptureDevice) {
@@ -173,5 +179,74 @@ enum FormatUtils {
     }
 
     return (bestFormat, resolvedBestFrameRate)
+  }
+
+  /// The length of the shorter side that a resolution preset asks for within an aspect ratio, or
+  /// nil for the highest resolution.
+  static func shortSide(for preset: PlatformResolutionPreset) -> Int32? {
+    switch preset {
+    case .low: return 240
+    case .medium: return 480
+    case .high: return 720
+    case .veryHigh: return 1080
+    case .ultraHigh: return 2160
+    case .max: return nil
+    }
+  }
+
+  /// Returns whether `dimensions` have the given aspect ratio, in either orientation.
+  static func matches(_ dimensions: CMVideoDimensions, _ aspectRatio: PlatformCameraAspectRatio)
+    -> Bool
+  {
+    let (long, short): (Int64, Int64) =
+      aspectRatio == .ratio4x3 ? (4, 3) : (16, 9)
+    let width = Int64(max(dimensions.width, dimensions.height))
+    let height = Int64(min(dimensions.width, dimensions.height))
+    return width * short == height * long
+  }
+
+  /// Returns the formats of `captureDevice` for an aspect ratio and a resolution preset, best
+  /// first, or an empty array when the device has no format with that aspect ratio.
+  ///
+  /// The formats have the aspect ratio and are HLG formats with `useHLG`, or formats without the
+  /// HLG color space otherwise. Among them, the video size is the smallest whose shorter side is at
+  /// least the preset's (the largest if none is, or for `max`). All returned formats have that
+  /// size, ordered by the largest photo they can take.
+  static func findAspectRatioFormats(
+    for captureDevice: CaptureDevice,
+    aspectRatio: PlatformCameraAspectRatio,
+    preset: PlatformResolutionPreset,
+    useHLG: Bool,
+    videoDimensionsConverter: VideoDimensionsConverter
+  ) -> [CaptureDeviceFormat] {
+    let candidates = captureDevice.flutterFormats.filter { format in
+      guard useHLG ? isHLGCapable(format) : !supportsHLGColorSpace(format) else { return false }
+      return matches(videoDimensionsConverter(format), aspectRatio)
+    }
+    func shortSide(of format: CaptureDeviceFormat) -> Int32 {
+      let size = videoDimensionsConverter(format)
+      return min(size.width, size.height)
+    }
+    let sizes = Set(candidates.map(shortSide(of:))).sorted()
+    guard let largest = sizes.last else { return [] }
+    let target = FormatUtils.shortSide(for: preset).flatMap { minimum in
+      sizes.first { $0 >= minimum }
+    }
+    let chosenSize = target ?? largest
+
+    func photoPixels(_ format: CaptureDeviceFormat) -> Int64 {
+      guard #available(iOS 16.0, *) else { return 0 }
+      return format.supportedMaxPhotoDimensions
+        .map { Int64($0.width) * Int64($0.height) }
+        .max() ?? 0
+    }
+    // A stable sort keeps the device's order among formats that take the same photo size.
+    return candidates.enumerated()
+      .filter { shortSide(of: $0.element) == chosenSize }
+      .sorted {
+        let (lhs, rhs) = (photoPixels($0.element), photoPixels($1.element))
+        return lhs != rhs ? lhs > rhs : $0.offset < $1.offset
+      }
+      .map(\.element)
   }
 }

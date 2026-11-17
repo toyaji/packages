@@ -17,6 +17,7 @@ A Flutter plugin for iOS, Android and Web allowing access to the device cameras.
 * Record video.
 * Add access to the image stream from Dart.
 * Show an HDR (10-bit HLG) preview on supported devices.
+* Choose the aspect ratio (4:3 or 16:9) of the preview, photos and video.
 
 ## Setup
 
@@ -113,6 +114,29 @@ final controller = CameraController(
 HDR changes the whole capture session, not only the preview, and some operations are not
 supported with it. `CameraController.getPreviewDynamicRange` reports what is applied. See the
 platform implementation READMEs (`camera_android_camerax`, `camera_avfoundation`) for details.
+
+### Aspect ratio
+
+`aspectRatio` sets the aspect ratio of the preview, photos and recorded video together, and the
+resolution preset then chooses the resolution within it: `high` is 720 on the shorter side (960x720
+for 4:3, 1280x720 for 16:9), and `max` is the highest resolution with that aspect ratio.
+
+<?code-excerpt "readme_aspect_ratio.dart (AspectRatio)"?>
+```dart
+final photoController = CameraController(
+  description,
+  ResolutionPreset.max,
+  aspectRatio: CameraAspectRatio.ratio4x3,
+);
+final videoController = CameraController(
+  description,
+  ResolutionPreset.veryHigh,
+  aspectRatio: CameraAspectRatio.ratio16x9,
+);
+```
+
+Without `aspectRatio`, the aspect ratio follows the resolution preset as before. It is supported
+by `camera_avfoundation` and `camera_android_camerax`.
 
 ### Example
 

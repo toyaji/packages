@@ -1,3 +1,8 @@
+## 0.7.8
+
+* Supports `MediaSettings.aspectRatio` for the preview, image capture, image analysis and video recording.
+* Updates minimum supported `camera_platform_interface` to 2.17.0.
+
 ## 0.7.7
 
 * Adds an HDR (10-bit HLG) preview through `MediaSettings.previewDynamicRange` on Android 14+.

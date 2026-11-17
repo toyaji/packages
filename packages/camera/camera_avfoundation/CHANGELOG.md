@@ -1,3 +1,8 @@
+## 0.11.3
+
+* Supports `MediaSettings.aspectRatio`, choosing the capture format by aspect ratio and resolution tier, and preferring a format of the same size that supports zero-shutter-lag when it is enabled.
+* Updates minimum supported `camera_platform_interface` to 2.17.0.
+
 ## 0.11.2
 
 * Adds an HDR (10-bit HLG) preview through `MediaSettings.previewDynamicRange`.

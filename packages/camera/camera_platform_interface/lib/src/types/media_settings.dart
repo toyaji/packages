@@ -4,6 +4,7 @@
 
 // ignore_for_file: avoid_equals_and_hash_code_on_mutable_classes
 
+import 'camera_aspect_ratio.dart';
 import 'preview_dynamic_range.dart';
 import 'resolution_preset.dart';
 
@@ -21,6 +22,7 @@ class MediaSettings {
     this.audioBitrate,
     this.enableAudio = false,
     this.previewDynamicRange = PreviewDynamicRange.sdr,
+    this.aspectRatio,
   }) : assert(fps == null || fps > 0, 'fps must be null or greater than zero'),
        assert(
          videoBitrate == null || videoBitrate > 0,
@@ -32,6 +34,11 @@ class MediaSettings {
        );
 
   /// [ResolutionPreset] affect the quality of video recording and image capture.
+  ///
+  /// With an [aspectRatio], the preset is a resolution tier within that
+  /// aspect ratio, by the length of the shorter side: for example `high` is
+  /// 720 (1280x720 for 16:9, 960x720 for 4:3) and `max` is the highest
+  /// resolution with that aspect ratio.
   final ResolutionPreset? resolutionPreset;
 
   /// Rate at which frames should be captured by the camera in frames per second.
@@ -64,6 +71,17 @@ class MediaSettings {
   /// the dynamic range that is applied.
   final PreviewDynamicRange previewDynamicRange;
 
+  /// The aspect ratio of the preview, photos and recorded video.
+  ///
+  /// All three outputs use the same aspect ratio, and [resolutionPreset]
+  /// chooses the resolution within it. When null, the platform chooses the
+  /// aspect ratio from [resolutionPreset], as in earlier versions.
+  ///
+  /// This is a request: when the camera has no output with this aspect ratio,
+  /// the platform falls back to another one. Platforms that do not support it
+  /// ignore it.
+  final CameraAspectRatio? aspectRatio;
+
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) {
@@ -78,7 +96,8 @@ class MediaSettings {
         videoBitrate == other.videoBitrate &&
         audioBitrate == other.audioBitrate &&
         enableAudio == other.enableAudio &&
-        previewDynamicRange == other.previewDynamicRange;
+        previewDynamicRange == other.previewDynamicRange &&
+        aspectRatio == other.aspectRatio;
   }
 
   @override
@@ -89,6 +108,7 @@ class MediaSettings {
     audioBitrate,
     enableAudio,
     previewDynamicRange,
+    aspectRatio,
   );
 
   @override
@@ -99,6 +119,7 @@ class MediaSettings {
         'videoBitrate: $videoBitrate, '
         'audioBitrate: $audioBitrate, '
         'enableAudio: $enableAudio, '
-        'previewDynamicRange: $previewDynamicRange}';
+        'previewDynamicRange: $previewDynamicRange, '
+        'aspectRatio: $aspectRatio}';
   }
 }

@@ -261,6 +261,10 @@ class CameraController extends ValueNotifier<CameraValue> {
   /// [PreviewDynamicRange.sdr] when it is unsupported; check
   /// [availablePreviewDynamicRanges] first and read the applied value with
   /// [getPreviewDynamicRange].
+  ///
+  /// [aspectRatio] sets the aspect ratio of the preview, photos and recorded
+  /// video together; [resolutionPreset] then chooses the resolution within
+  /// it. When null, the aspect ratio follows [resolutionPreset] as before.
 
   CameraController(
     CameraDescription description,
@@ -270,6 +274,7 @@ class CameraController extends ValueNotifier<CameraValue> {
     int? videoBitrate,
     int? audioBitrate,
     PreviewDynamicRange previewDynamicRange = PreviewDynamicRange.sdr,
+    CameraAspectRatio? aspectRatio,
     this.imageFormatGroup,
   }) : mediaSettings = MediaSettings(
          resolutionPreset: resolutionPreset,
@@ -278,6 +283,7 @@ class CameraController extends ValueNotifier<CameraValue> {
          videoBitrate: videoBitrate,
          audioBitrate: audioBitrate,
          previewDynamicRange: previewDynamicRange,
+         aspectRatio: aspectRatio,
        ),
        super(CameraValue.uninitialized(description));
 

@@ -1,3 +1,7 @@
+## 2.17.0
+
+* Adds `MediaSettings.aspectRatio` (`CameraAspectRatio`) to choose the aspect ratio of the preview, photos and recorded video, with the resolution preset as a tier within it.
+
 ## 2.16.0
 
 * Adds `MediaSettings.previewDynamicRange`, `getSupportedPreviewDynamicRanges`, and `getPreviewDynamicRange` for an HDR (10-bit HLG) camera preview.

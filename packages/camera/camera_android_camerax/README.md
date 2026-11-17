@@ -31,6 +31,13 @@ Calling `startVideoCapturing` with `VideoCaptureOptions` configured with
 limitations of the platform interface,
 and thus that parameter will silently be ignored.
 
+### Aspect ratio
+
+With `MediaSettings.aspectRatio`, the preview and image analysis use the resolution preset as a
+tier within the aspect ratio, photos use the highest resolution with it, and video is recorded
+with it through `Recorder`. The `low` tier records at SD (480p), because CameraX has no lower video
+quality.
+
 ### HDR preview
 
 Requesting `PreviewDynamicRange.hlg10` (see `MediaSettings.previewDynamicRange`) is supported on

@@ -615,14 +615,17 @@ final class CameraSampleBufferTests: XCTestCase {
 
   /// Starts an HLG recording on a 1920x1440 HLG camera and switches to `newDevice`.
   private func switchDuringHLGRecording(
-    to newDevice: MockCaptureDevice
+    to newDevice: MockCaptureDevice,
+    range: PlatformPreviewDynamicRange = .hlg10,
+    aspectRatio: PlatformCameraAspectRatio? = nil,
+    initialFormat: MockCaptureDeviceFormat? = nil
   ) -> (camera: DefaultCamera, hlgDevice: MockCaptureDevice, result: Result<Void, any Error>?) {
     let configuration = CameraTestUtils.createTestCameraConfiguration()
     configuration.mediaSettingsWrapper = FakeMediaSettingsAVWrapper(
       inputMock: MockAssetWriterInput())
     configuration.mediaSettings = PlatformMediaSettings(
       resolutionPreset: .max, framesPerSecond: nil, videoBitrate: nil, audioBitrate: nil,
-      enableAudio: false, previewDynamicRange: .hlg10)
+      enableAudio: false, previewDynamicRange: range, aspectRatio: aspectRatio)
 
     let videoSessionMock = MockCaptureSession()
     videoSessionMock.canSetSessionPresetStub = { _ in true }
@@ -632,13 +635,13 @@ final class CameraSampleBufferTests: XCTestCase {
     }
     configuration.videoCaptureSession = videoSessionMock
 
-    let hlgDevice = makeDevice(formats: [makeHLGFormat(1920, 1440)])
+    let hlgDevice = makeDevice(formats: [initialFormat ?? makeHLGFormat(1920, 1440)])
     configuration.videoCaptureDeviceFactory = { name in
       return name == "new_camera" ? newDevice : hlgDevice
     }
 
     let camera = CameraTestUtils.createTestCamera(configuration)
-    XCTAssertEqual(camera.previewDynamicRange, .hlg10)
+    XCTAssertEqual(camera.previewDynamicRange, range)
     camera.startVideoRecording(completion: { _ in }, messengerForStreaming: nil)
 
     var result: Result<Void, any Error>?
@@ -690,5 +693,38 @@ final class CameraSampleBufferTests: XCTestCase {
     XCTAssertTrue(newDevice.flutterActiveFormat === sameSize)
     XCTAssertEqual(newDevice.activeColorSpace, .HLG_BT2020)
     XCTAssertEqual(camera.previewDynamicRange, .hlg10)
+  }
+
+  func testSetDescriptionWhileRecording_keepsTheSizeOfAnAspectRatioFormat() {
+    let sdrFormat = MockCaptureDeviceFormat(
+      codecType: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, width: 1920, height: 1440)
+    let sameSize = MockCaptureDeviceFormat(
+      codecType: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, width: 1920, height: 1440)
+    let newDevice = makeDevice(formats: [MockCaptureDeviceFormat(), sameSize])
+
+    let (camera, _, result) = switchDuringHLGRecording(
+      to: newDevice, range: .sdr, aspectRatio: .ratio4x3, initialFormat: sdrFormat)
+
+    if case .failure(let error) = result {
+      XCTFail("Unexpected failure: \(error)")
+    }
+    XCTAssertTrue(camera.captureDevice === newDevice)
+    XCTAssertTrue(newDevice.flutterActiveFormat === sameSize)
+  }
+
+  func testSetDescriptionWhileRecording_withAnAspectRatioKeepsTheDefaultFormatWithoutTheSize() {
+    let sdrFormat = MockCaptureDeviceFormat(
+      codecType: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, width: 1920, height: 1440)
+    let other = MockCaptureDeviceFormat()
+    let newDevice = makeDevice(formats: [other])
+
+    let (camera, _, result) = switchDuringHLGRecording(
+      to: newDevice, range: .sdr, aspectRatio: .ratio4x3, initialFormat: sdrFormat)
+
+    if case .failure(let error) = result {
+      XCTFail("Unexpected failure: \(error)")
+    }
+    XCTAssertTrue(camera.captureDevice === newDevice)
+    XCTAssertTrue(newDevice.flutterActiveFormat === other)
   }
 }

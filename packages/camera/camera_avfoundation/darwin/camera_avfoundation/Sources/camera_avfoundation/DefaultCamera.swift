@@ -143,6 +143,9 @@ final class DefaultCamera: NSObject, Camera {
   /// `isZeroShutterLagEnabled`, so the requested state is kept here and
   /// reapplied afterwards.
   private var zeroShutterLagRequested: Bool?
+  /// The formats that the aspect ratio and the resolution preset chose, best first. They have the
+  /// same size and dynamic range, so any of them can replace the active one.
+  private var aspectRatioFormats: [CaptureDeviceFormat] = []
   private var lockedCaptureOrientation = UIDeviceOrientation.unknown
   private var exposureMode = PlatformExposureMode.auto
   private var focusMode = PlatformFocusMode.auto
@@ -253,14 +256,25 @@ final class DefaultCamera: NSObject, Camera {
       mediaSettingsAVWrapper.beginConfiguration(for: videoCaptureSession)
       defer { mediaSettingsAVWrapper.commitConfiguration(for: videoCaptureSession) }
 
-      try setCaptureSessionPreset(mediaSettings.resolutionPreset)
-      let isHLGFormatApplied = applyHLGFormat()
+      let isHLGFormatApplied: Bool
+      var isAspectRatioFormatApplied = false
+      if let aspectRatio = mediaSettings.aspectRatio, applyAspectRatioFormat(aspectRatio) {
+        isAspectRatioFormatApplied = true
+        isHLGFormatApplied = previewDynamicRange == .hlg10
+        // The frame rate search below can pick another format of the same size.
+        aspectRatioFormats = []
+      } else {
+        try setCaptureSessionPreset(mediaSettings.resolutionPreset)
+        isHLGFormatApplied = applyHLGFormat()
+      }
 
       (captureDevice.flutterActiveFormat, framesPerSecond) = FormatUtils.findBestFormat(
         for: captureDevice,
         mediaSettings: mediaSettings,
         videoDimensionsConverter: videoDimensionsConverter,
-        formatFilter: isHLGFormatApplied ? FormatUtils.isHLGCapable : nil)
+        formatFilter: isHLGFormatApplied
+          ? FormatUtils.isHLGCapable
+          : (isAspectRatioFormatApplied ? { !FormatUtils.supportsHLGColorSpace($0) } : nil))
       if isHLGFormatApplied {
         FormatUtils.setHLGColorSpace(on: captureDevice)
       }
@@ -273,6 +287,9 @@ final class DefaultCamera: NSObject, Camera {
         mediaSettingsAVWrapper.setMinFrameDuration(duration, on: captureDevice)
         mediaSettingsAVWrapper.setMaxFrameDuration(duration, on: captureDevice)
       }
+    } else if let aspectRatio = mediaSettings.aspectRatio, applyAspectRatioFormatLocked(aspectRatio)
+    {
+      // The format was chosen for the aspect ratio.
     } else {
       // If the frame rate is not important fall to a less restrictive
       // behavior (no configuration locking).
@@ -430,6 +447,78 @@ final class DefaultCamera: NSObject, Camera {
       }
     }
     return bestFormat
+  }
+
+  /// Locks the device and applies `applyAspectRatioFormat`. Returns false if the device cannot be
+  /// locked or has no format with the aspect ratio.
+  private func applyAspectRatioFormatLocked(_ aspectRatio: PlatformCameraAspectRatio) -> Bool {
+    do {
+      try captureDevice.lockForConfiguration()
+      defer { captureDevice.unlockForConfiguration() }
+      return applyAspectRatioFormat(aspectRatio)
+    } catch {
+      reportErrorMessage("Unable to lock the camera to choose its format: \(error)")
+      return false
+    }
+  }
+
+  /// Applies the best format for the aspect ratio and the resolution preset, as an HLG format if
+  /// `hlg10` was requested and the device has one. The caller must have locked the device for
+  /// configuration. Returns false, leaving the device untouched, when the device has no format with
+  /// the aspect ratio.
+  private func applyAspectRatioFormat(_ aspectRatio: PlatformCameraAspectRatio) -> Bool {
+    func find(useHLG: Bool) -> [CaptureDeviceFormat] {
+      return FormatUtils.findAspectRatioFormats(
+        for: captureDevice, aspectRatio: aspectRatio, preset: mediaSettings.resolutionPreset,
+        useHLG: useHLG, videoDimensionsConverter: videoDimensionsConverter)
+    }
+    var useHLG = mediaSettings.previewDynamicRange == .hlg10
+    var formats = useHLG ? find(useHLG: true) : []
+    if formats.isEmpty {
+      useHLG = false
+      formats = find(useHLG: false)
+    }
+    guard let format = formats.first else { return false }
+
+    videoCaptureSession.sessionPreset = .inputPriority
+    captureDevice.flutterActiveFormat = format
+    if useHLG {
+      videoCaptureSession.automaticallyConfiguresCaptureDeviceForWideColor = false
+      FormatUtils.setHLGColorSpace(on: captureDevice)
+      previewDynamicRange = .hlg10
+    }
+    aspectRatioFormats = formats
+    let size = videoDimensionsConverter(format)
+    previewSize = CGSize(width: CGFloat(size.width), height: CGFloat(size.height))
+    audioCaptureSession.sessionPreset = videoCaptureSession.sessionPreset
+    return true
+  }
+
+  /// Switches to another format of `aspectRatioFormats` that supports zero-shutter-lag, if the
+  /// active one does not. All of them have the same size and dynamic range.
+  private func preferZeroShutterLagFormat() {
+    guard aspectRatioFormats.count > 1, !capturePhotoOutput.flutterZeroShutterLagSupported,
+      (try? captureDevice.lockForConfiguration()) != nil
+    else {
+      return
+    }
+    defer { captureDevice.unlockForConfiguration() }
+    videoCaptureSession.beginConfiguration()
+    defer { videoCaptureSession.commitConfiguration() }
+
+    let current = captureDevice.flutterActiveFormat
+    let colorSpace = captureDevice.activeColorSpace
+    for format in aspectRatioFormats where format !== current {
+      captureDevice.flutterActiveFormat = format
+      if capturePhotoOutput.flutterZeroShutterLagSupported {
+        captureDevice.activeColorSpace = colorSpace
+        configureMaxPhotoDimensions()
+        applyVideoSettings()
+        return
+      }
+    }
+    captureDevice.flutterActiveFormat = current
+    captureDevice.activeColorSpace = colorSpace
   }
 
   /// Applies an HLG format for the resolution preset if `hlg10` was requested. The preview stays
@@ -1098,6 +1187,9 @@ final class DefaultCamera: NSObject, Camera {
   /// `beginConfiguration`/`commitConfiguration`.
   func setZeroShutterLagEnabled(_ enabled: Bool) {
     zeroShutterLagRequested = enabled
+    if enabled {
+      preferZeroShutterLagFormat()
+    }
     applyZeroShutterLag(enabled)
   }
 
@@ -1400,18 +1492,23 @@ final class DefaultCamera: NSObject, Camera {
     }
 
     let newCaptureDevice = videoCaptureDeviceFactory(cameraName)
-    // The range is fixed for the life of the camera and the writer keeps its format and size, so
-    // an HLG recording continues only on an HLG format of the same size. Anything else is refused
-    // before the session is touched.
-    var newHLGFormat: CaptureDeviceFormat?
-    if previewDynamicRange == .hlg10 {
+    // The writer keeps its format and size, so a camera whose format was chosen (HLG or an aspect
+    // ratio) continues on a format of the same size and dynamic range. The range is fixed for the
+    // life of the camera, so an HLG recording that cannot continue is refused before the session is
+    // touched; otherwise the new camera keeps its default format, as without these settings.
+    let isHLG = previewDynamicRange == .hlg10
+    var newFormat: CaptureDeviceFormat?
+    if isHLG || mediaSettings.aspectRatio != nil {
       let size = videoDimensionsConverter(captureDevice.flutterActiveFormat)
-      newHLGFormat = newCaptureDevice.flutterFormats.first {
+      newFormat = newCaptureDevice.flutterFormats.first {
         let candidate = videoDimensionsConverter($0)
-        return FormatUtils.isHLGCapable($0) && candidate.width == size.width
-          && candidate.height == size.height
+        return candidate.width == size.width && candidate.height == size.height
+          && (isHLG ? FormatUtils.isHLGCapable($0) : !FormatUtils.supportsHLGColorSpace($0))
       }
-      guard newHLGFormat != nil, (try? newCaptureDevice.lockForConfiguration()) != nil else {
+      if newFormat != nil, (try? newCaptureDevice.lockForConfiguration()) == nil {
+        newFormat = nil
+      }
+      if isHLG && newFormat == nil {
         completion(
           .failure(
             PigeonError(
@@ -1422,11 +1519,12 @@ final class DefaultCamera: NSObject, Camera {
       }
     }
     defer {
-      if newHLGFormat != nil {
+      if newFormat != nil {
         newCaptureDevice.unlockForConfiguration()
       }
     }
     captureDevice = newCaptureDevice
+    aspectRatioFormats = []
 
     let oldConnection = captureVideoOutput.connection(with: .video)
 
@@ -1502,11 +1600,13 @@ final class DefaultCamera: NSObject, Camera {
             details: nil)))
     }
     videoCaptureSession.addConnection(newConnection)
-    if let newHLGFormat {
+    if let newFormat {
       // The new device starts with its own default format.
       videoCaptureSession.sessionPreset = .inputPriority
-      captureDevice.flutterActiveFormat = newHLGFormat
-      FormatUtils.setHLGColorSpace(on: captureDevice)
+      captureDevice.flutterActiveFormat = newFormat
+      if isHLG {
+        FormatUtils.setHLGColorSpace(on: captureDevice)
+      }
     }
     videoCaptureSession.commitConfiguration()
 
