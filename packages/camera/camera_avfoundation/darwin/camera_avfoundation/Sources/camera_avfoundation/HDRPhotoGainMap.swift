@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 import CoreImage
-import CoreImage.CIFilterBuiltins
 import Foundation
 import ImageIO
 
@@ -67,21 +66,9 @@ enum HDRPhotoGainMap {
             scaleX: sdr.extent.width / hdr.extent.width,
             y: sdr.extent.height / hdr.extent.height)))
 
-    // The HLG frame puts diffuse white above SDR white, so its midtones are matched to the photo
-    // first; otherwise the gain map would brighten the whole photo, not only its highlights.
-    let scale = midtoneRatio(sdr: sdr, hdr: hdr, context: context)
-    if scale > 0 {
-      let filter = CIFilter.colorMatrix()
-      filter.inputImage = hdr
-      let k = CGFloat(1 / scale)
-      filter.rVector = CIVector(x: k, y: 0, z: 0, w: 0)
-      filter.gVector = CIVector(x: 0, y: k, z: 0, w: 0)
-      filter.bVector = CIVector(x: 0, y: 0, z: k, w: 0)
-      if let matched = filter.outputImage {
-        hdr = matched
-      }
-    }
-
+    // Core Image reads the HLG frame as BT.2100 display light with BT.2408 reference white (203
+    // cd/m2) at 1.0, the same values the HLG preview shows. The frame is used unscaled, so the
+    // photo's HDR rendition equals the preview.
     // Core Image computes the gain map from the ratio of the HDR image to the SDR image. Only the
     // gain map of this intermediate file is used, so its format does not matter.
     guard
@@ -104,41 +91,6 @@ enum HDRPhotoGainMap {
       destination, kCGImageAuxiliaryDataTypeISOGainMap, gainMap)
     guard CGImageDestinationFinalize(destination) else { return nil }
     return output as Data
-  }
-
-  /// The median HDR-to-SDR luminance ratio over midtone pixels, or 0 if there are too few.
-  ///
-  /// Both images are compared small and in extended linear light. Dark and clipped SDR pixels are
-  /// left out, since their ratio says nothing about exposure.
-  static func midtoneRatio(sdr: CIImage, hdr: CIImage, context: CIContext) -> Float {
-    let side: CGFloat = 64
-    let scale = side / max(sdr.extent.width, sdr.extent.height)
-    let width = Int((sdr.extent.width * scale).rounded())
-    let height = Int((sdr.extent.height * scale).rounded())
-    guard width > 0, height > 0,
-      let linear = CGColorSpace(name: CGColorSpace.extendedLinearDisplayP3)
-    else { return 0 }
-    func render(_ image: CIImage) -> [Float] {
-      var pixels = [Float](repeating: 0, count: width * height * 4)
-      context.render(
-        image.transformed(by: CGAffineTransform(scaleX: scale, y: scale)), toBitmap: &pixels,
-        rowBytes: width * 16, bounds: CGRect(x: 0, y: 0, width: width, height: height),
-        format: .RGBAf, colorSpace: linear)
-      return pixels
-    }
-    let sdrPixels = render(sdr)
-    let hdrPixels = render(hdr)
-    var ratios: [Float] = []
-    for i in stride(from: 0, to: sdrPixels.count, by: 4) {
-      let s = 0.2126 * sdrPixels[i] + 0.7152 * sdrPixels[i + 1] + 0.0722 * sdrPixels[i + 2]
-      let h = 0.2126 * hdrPixels[i] + 0.7152 * hdrPixels[i + 1] + 0.0722 * hdrPixels[i + 2]
-      if s > 0.02 && s < 0.8 && h > 0 {
-        ratios.append(h / s)
-      }
-    }
-    guard ratios.count >= width * height / 10 else { return 0 }
-    ratios.sort()
-    return ratios[ratios.count / 2]
   }
 
   /// The orientation that undoes `orientation`.

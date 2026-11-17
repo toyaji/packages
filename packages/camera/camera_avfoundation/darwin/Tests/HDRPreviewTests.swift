@@ -326,6 +326,32 @@ final class HDRPreviewTests: XCTestCase {
     XCTAssertEqual(exif?[kCGImagePropertyExifLensModel] as? String, "test lens")
   }
 
+  func testAddingGainMapShowsTheHLGFrameValuesAsHDR() throws {
+    guard #available(iOS 18.0, *) else { throw XCTSkip("Requires iOS 18.") }
+    try skipUnlessCoreImageWritesGainMapMetadata()
+    let photo = makeJPEG(400, 300, orientation: .up)
+    let frame = makeHLGFrame(400, 300)
+
+    let result = try XCTUnwrap(
+      HDRPhotoGainMap.addingGainMap(to: photo, hdrFrame: frame, context: CIContext()))
+
+    // The HDR rendition must equal the frame as the HLG preview shows it (BT.2100, BT.2408
+    // reference white at 1.0), not a rescaled version of it.
+    let expected = luminance(of: CIImage(cvPixelBuffer: frame))
+    let hdr = try XCTUnwrap(CIImage(data: result, options: [.expandToHDR: true]))
+    XCTAssertGreaterThan(expected, 1, "The test frame must be brighter than SDR white.")
+    XCTAssertEqual(luminance(of: hdr), expected, accuracy: expected * 0.02)
+  }
+
+  private func luminance(of image: CIImage) -> Float {
+    var pixel = [Float](repeating: 0, count: 4)
+    let center = CGRect(x: image.extent.midX, y: image.extent.midY, width: 1, height: 1)
+    CIContext().render(
+      image, toBitmap: &pixel, rowBytes: 16, bounds: center, format: .RGBAf,
+      colorSpace: CGColorSpace(name: CGColorSpace.extendedLinearDisplayP3)!)
+    return 0.2126 * pixel[0] + 0.7152 * pixel[1] + 0.0722 * pixel[2]
+  }
+
   func testAddingGainMapFailsWhenTheFrameHasAnotherAspectRatio() throws {
     guard #available(iOS 18.0, *) else { throw XCTSkip("Requires iOS 18.") }
     let photo = makeJPEG(400, 300, orientation: .up)
