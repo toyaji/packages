@@ -380,14 +380,14 @@ abstract class CameraApi {
   @ObjCSelector('setZeroShutterLagEnabled:')
   void setZeroShutterLagEnabled(bool enabled);
 
-  /// Returns whether the current session configuration can capture HDR photos.
+  /// Returns whether the current session configuration can capture gain map photos.
   @async
-  bool isHdrPhotoSupported();
+  bool isGainMapPhotoSupported();
 
-  /// Enables or disables HDR photo capture.
+  /// Enables or disables gain map photo capture.
   @async
-  @ObjCSelector('setHdrPhotoEnabled:')
-  void setHdrPhotoEnabled(bool enabled);
+  @ObjCSelector('setGainMapPhotoEnabled:')
+  void setGainMapPhotoEnabled(bool enabled);
 }
 
 @EventChannelApi()

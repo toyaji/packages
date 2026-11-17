@@ -456,13 +456,13 @@ class AVFoundationCamera extends CameraPlatform {
   }
 
   @override
-  Future<bool> isHdrPhotoSupported(int cameraId) {
-    return _hostApi.isHdrPhotoSupported();
+  Future<bool> isGainMapPhotoSupported(int cameraId) {
+    return _hostApi.isGainMapPhotoSupported();
   }
 
   @override
-  Future<void> setHdrPhotoEnabled(int cameraId, bool enabled) async {
-    await _hostApi.setHdrPhotoEnabled(enabled);
+  Future<void> setGainMapPhotoEnabled(int cameraId, bool enabled) async {
+    await _hostApi.setGainMapPhotoEnabled(enabled);
   }
 
   @override

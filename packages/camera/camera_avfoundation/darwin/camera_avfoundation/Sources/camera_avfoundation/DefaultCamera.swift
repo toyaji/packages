@@ -102,9 +102,9 @@ final class DefaultCamera: NSObject, Camera {
   /// Tracks the latest pixel buffer sent from AVFoundation's sample buffer delegate callback.
   /// Used to deliver the latest pixel buffer to the flutter engine via the `copyPixelBuffer` API.
   private var latestPixelBuffer: CVPixelBuffer?
-  /// Whether HDR photos were requested via `setHdrPhotoEnabled`.
-  private var hdrPhotoEnabled = false
-  /// The latest 10-bit HLG video frame, kept while HDR photos are enabled to make a photo's gain
+  /// Whether gain map photos were requested via `setGainMapPhotoEnabled`.
+  private var gainMapPhotoEnabled = false
+  /// The latest 10-bit HLG video frame, kept while gain map photos are enabled to make a photo's gain
   /// map. Accessed on the capture session queue.
   private var latestGainMapFrame: CVPixelBuffer?
 
@@ -1083,7 +1083,7 @@ final class DefaultCamera: NSObject, Camera {
     let savePhotoDelegate = SavePhotoDelegate(
       path: path,
       ioQueue: photoIOQueue,
-      hdrFrame: hdrPhotoEnabled && isHdrPhotoSupported() ? latestGainMapFrame : nil,
+      hdrFrame: gainMapPhotoEnabled && isGainMapPhotoSupported() ? latestGainMapFrame : nil,
       completionHandler: { [weak self] path, error in
         guard let strongSelf = self else { return }
 
@@ -1222,15 +1222,15 @@ final class DefaultCamera: NSObject, Camera {
     self.imageQuality = quality
   }
 
-  /// HDR photos need an HLG session: the gain map is taken from the photo when the device adds
+  /// Gain map photos need an HLG session: the gain map is taken from the photo when the device adds
   /// one, or made from the HLG video frame at the shutter otherwise (iOS 18 Core Image).
-  func isHdrPhotoSupported() -> Bool {
+  func isGainMapPhotoSupported() -> Bool {
     guard #available(iOS 18.0, *) else { return false }
     return previewDynamicRange == .hlg10
   }
 
-  func setHdrPhotoEnabled(_ enabled: Bool) {
-    hdrPhotoEnabled = enabled
+  func setGainMapPhotoEnabled(_ enabled: Bool) {
+    gainMapPhotoEnabled = enabled
     if !enabled {
       latestGainMapFrame = nil
     }
@@ -1771,7 +1771,7 @@ final class DefaultCamera: NSObject, Camera {
     if output == captureVideoOutput.avOutput {
       if let newBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
 
-        if hdrPhotoEnabled && isHdrPhotoSupported() {
+        if gainMapPhotoEnabled && isGainMapPhotoSupported() {
           latestGainMapFrame = newBuffer
         }
         // The HLG preview is rendered by the preview layer, not by the texture.

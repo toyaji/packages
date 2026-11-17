@@ -80,9 +80,9 @@ protocol Camera: FlutterTexture, AVCaptureVideoDataOutputSampleBufferDelegate,
   func isZeroShutterLagSupported() -> Bool
   func setZeroShutterLagEnabled(_ enabled: Bool)
 
-  /// Whether photos can be saved as HDR photos with a gain map.
-  func isHdrPhotoSupported() -> Bool
-  func setHdrPhotoEnabled(_ enabled: Bool)
+  /// Whether photos can be saved as gain map photos.
+  func isGainMapPhotoSupported() -> Bool
+  func setGainMapPhotoEnabled(_ enabled: Bool)
 
   func setExposureMode(_ mode: PlatformExposureMode)
   func setExposureOffset(_ offset: Double)

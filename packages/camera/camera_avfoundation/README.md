@@ -49,9 +49,9 @@ so while it is active:
 
 `getPreviewDynamicRange` reports the dynamic range that the camera was created with.
 
-### HDR photos
+### Gain map photos
 
-With an `hlg10` preview on iOS 18 or later, `setHdrPhotoEnabled(true)` saves photos with a gain
+With an `hlg10` preview on iOS 18 or later, `setGainMapPhotoEnabled(true)` saves photos with a gain
 map, in the requested file format. Photos keep the gain map that the device adds; otherwise an
 ISO 21496-1 gain map is made from the HLG video frame at the shutter, with its midtones matched to
-the photo. `isHdrPhotoSupported` is false without an `hlg10` preview.
+the photo. `isGainMapPhotoSupported` is false without an `hlg10` preview.

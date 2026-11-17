@@ -3961,7 +3961,7 @@ void main() {
     },
   );
 
-  group('HDR photo', () {
+  group('gain map photo', () {
     late AndroidCameraCameraX camera;
     late MockImageCapture mockNewImageCapture;
     late MockCameraInfo mockCameraInfo;
@@ -4004,31 +4004,34 @@ void main() {
           };
     }
 
-    test('isHdrPhotoSupported reports the Ultra HDR output format', () async {
+    test('isGainMapPhotoSupported reports the Ultra HDR output format', () async {
       setUpCamera(supportedOutputFormats: <int>[0, 1]);
-      expect(await camera.isHdrPhotoSupported(3), isTrue);
+      expect(await camera.isGainMapPhotoSupported(3), isTrue);
 
       setUpCamera(supportedOutputFormats: <int>[0]);
-      expect(await camera.isHdrPhotoSupported(3), isFalse);
+      expect(await camera.isGainMapPhotoSupported(3), isFalse);
     });
 
-    test('setHdrPhotoEnabled recreates ImageCapture with the Ultra HDR output format', () async {
-      setUpCamera(supportedOutputFormats: <int>[0, 1]);
+    test(
+      'setGainMapPhotoEnabled recreates ImageCapture with the Ultra HDR output format',
+      () async {
+        setUpCamera(supportedOutputFormats: <int>[0, 1]);
 
-      await camera.setHdrPhotoEnabled(3, true);
-      await camera.setHdrPhotoEnabled(3, false);
+        await camera.setGainMapPhotoEnabled(3, true);
+        await camera.setGainMapPhotoEnabled(3, false);
 
-      expect(outputFormats, <int?>[
-        AndroidCameraCameraX.imageCaptureOutputFormatJpegUltraHdr,
-        null,
-      ]);
-      expect(camera.imageCapture, mockNewImageCapture);
-    });
+        expect(outputFormats, <int?>[
+          AndroidCameraCameraX.imageCaptureOutputFormatJpegUltraHdr,
+          null,
+        ]);
+        expect(camera.imageCapture, mockNewImageCapture);
+      },
+    );
 
-    test('setHdrPhotoEnabled keeps JPEG photos on a camera without Ultra HDR', () async {
+    test('setGainMapPhotoEnabled keeps JPEG photos on a camera without Ultra HDR', () async {
       setUpCamera(supportedOutputFormats: <int>[0]);
 
-      await camera.setHdrPhotoEnabled(3, true);
+      await camera.setGainMapPhotoEnabled(3, true);
 
       expect(outputFormats, isEmpty);
     });
@@ -4037,7 +4040,7 @@ void main() {
       setUpCamera(supportedOutputFormats: <int>[0, 1]);
       when(mockCameraInfo.isZslSupported()).thenAnswer((_) async => true);
 
-      await camera.setHdrPhotoEnabled(3, true);
+      await camera.setGainMapPhotoEnabled(3, true);
       await camera.setZeroShutterLagEnabled(3, true);
 
       expect(outputFormats.last, AndroidCameraCameraX.imageCaptureOutputFormatJpegUltraHdr);

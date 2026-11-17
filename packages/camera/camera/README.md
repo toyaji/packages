@@ -18,7 +18,7 @@ A Flutter plugin for iOS, Android and Web allowing access to the device cameras.
 * Add access to the image stream from Dart.
 * Show an HDR (10-bit HLG) preview on supported devices.
 * Choose the aspect ratio (4:3 or 16:9) of the preview, photos and video.
-* Capture HDR photos with a gain map on supported devices.
+* Capture gain map photos on supported devices.
 
 ## Setup
 
@@ -116,11 +116,11 @@ HDR changes the whole capture session, not only the preview, and some operations
 supported with it. `CameraController.getPreviewDynamicRange` reports what is applied. See the
 platform implementation READMEs (`camera_android_camerax`, `camera_avfoundation`) for details.
 
-### HDR photos
+### Gain map photos
 
-`setHdrPhotoEnabled(true)` saves photos with a gain map, which HDR displays use to show highlights
+`setGainMapPhotoEnabled(true)` saves photos with a gain map, which HDR displays use to show highlights
 brighter than SDR content, and other displays show as the regular photo. Check
-`isHdrPhotoSupported` after initializing; on cameras that do not support it, photos are taken as
+`isGainMapPhotoSupported` after initializing; on cameras that do not support it, photos are taken as
 before. See the platform implementation READMEs for the conditions.
 
 ### Aspect ratio

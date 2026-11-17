@@ -953,10 +953,10 @@ protocol CameraApi {
   func isZeroShutterLagSupported(completion: @escaping (Result<Bool, Error>) -> Void)
   /// Enables or disables zero-shutter-lag capture.
   func setZeroShutterLagEnabled(enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void)
-  /// Returns whether the current session configuration can capture HDR photos.
-  func isHdrPhotoSupported(completion: @escaping (Result<Bool, Error>) -> Void)
-  /// Enables or disables HDR photo capture.
-  func setHdrPhotoEnabled(enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void)
+  /// Returns whether the current session configuration can capture gain map photos.
+  func isGainMapPhotoSupported(completion: @escaping (Result<Bool, Error>) -> Void)
+  /// Enables or disables gain map photo capture.
+  func setGainMapPhotoEnabled(enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void)
 }
 
 /// Generated setup class from Pigeon to handle messages through the `binaryMessenger`.
@@ -1721,13 +1721,14 @@ class CameraApiSetup {
     } else {
       setZeroShutterLagEnabledChannel.setMessageHandler(nil)
     }
-    /// Returns whether the current session configuration can capture HDR photos.
-    let isHdrPhotoSupportedChannel = FlutterBasicMessageChannel(
-      name: "dev.flutter.pigeon.camera_avfoundation.CameraApi.isHdrPhotoSupported\(channelSuffix)",
+    /// Returns whether the current session configuration can capture gain map photos.
+    let isGainMapPhotoSupportedChannel = FlutterBasicMessageChannel(
+      name:
+        "dev.flutter.pigeon.camera_avfoundation.CameraApi.isGainMapPhotoSupported\(channelSuffix)",
       binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
-      isHdrPhotoSupportedChannel.setMessageHandler { _, reply in
-        api.isHdrPhotoSupported { result in
+      isGainMapPhotoSupportedChannel.setMessageHandler { _, reply in
+        api.isGainMapPhotoSupported { result in
           switch result {
           case .success(let res):
             reply(wrapResult(res))
@@ -1737,17 +1738,18 @@ class CameraApiSetup {
         }
       }
     } else {
-      isHdrPhotoSupportedChannel.setMessageHandler(nil)
+      isGainMapPhotoSupportedChannel.setMessageHandler(nil)
     }
-    /// Enables or disables HDR photo capture.
-    let setHdrPhotoEnabledChannel = FlutterBasicMessageChannel(
-      name: "dev.flutter.pigeon.camera_avfoundation.CameraApi.setHdrPhotoEnabled\(channelSuffix)",
+    /// Enables or disables gain map photo capture.
+    let setGainMapPhotoEnabledChannel = FlutterBasicMessageChannel(
+      name:
+        "dev.flutter.pigeon.camera_avfoundation.CameraApi.setGainMapPhotoEnabled\(channelSuffix)",
       binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
-      setHdrPhotoEnabledChannel.setMessageHandler { message, reply in
+      setGainMapPhotoEnabledChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
         let enabledArg = args[0] as! Bool
-        api.setHdrPhotoEnabled(enabled: enabledArg) { result in
+        api.setGainMapPhotoEnabled(enabled: enabledArg) { result in
           switch result {
           case .success:
             reply(wrapResult(nil))
@@ -1757,7 +1759,7 @@ class CameraApiSetup {
         }
       }
     } else {
-      setHdrPhotoEnabledChannel.setMessageHandler(nil)
+      setGainMapPhotoEnabledChannel.setMessageHandler(nil)
     }
   }
 }

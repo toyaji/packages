@@ -221,15 +221,15 @@ final class HDRPreviewTests: XCTestCase {
     #endif
   }
 
-  // MARK: HDR photo
+  // MARK: gain map photo
 
-  func testHdrPhotoIsSupportedOnlyWithAnHLGSession() throws {
+  func testGainMapPhotoIsSupportedOnlyWithAnHLGSession() throws {
     guard #available(iOS 18.0, *) else { throw XCTSkip("Requires iOS 18.") }
     let hlg = makeCamera(device: makeDevice(formats: [makeHLGFormat(1920, 1440)]), range: .hlg10)
-    XCTAssertTrue(hlg.isHdrPhotoSupported())
+    XCTAssertTrue(hlg.isGainMapPhotoSupported())
 
     let sdr = makeCamera(device: makeDevice(formats: [makeHLGFormat(1920, 1440)]), range: .sdr)
-    XCTAssertFalse(sdr.isHdrPhotoSupported())
+    XCTAssertFalse(sdr.isGainMapPhotoSupported())
   }
 
   /// A JPEG of `width`x`height` mid gray, with an orientation property.

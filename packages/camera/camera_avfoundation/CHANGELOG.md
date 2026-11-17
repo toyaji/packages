@@ -1,6 +1,6 @@
 ## 0.11.4
 
-* Supports HDR photos (`setHdrPhotoEnabled`) with an HDR (`hlg10`) preview on iOS 18+: photos keep the gain map the device adds, or get an ISO 21496-1 gain map made from the HLG video frame at the shutter.
+* Supports gain map photos (`setGainMapPhotoEnabled`) with an HDR (`hlg10`) preview on iOS 18+: photos keep the gain map the device adds, or get an ISO 21496-1 gain map made from the HLG video frame at the shutter.
 * Updates minimum supported `camera_platform_interface` to 2.18.0.
 
 ## 0.11.3

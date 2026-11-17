@@ -1,6 +1,6 @@
 ## 2.18.0
 
-* Adds `isHdrPhotoSupported` and `setHdrPhotoEnabled` to capture HDR photos, which contain a gain map.
+* Adds `isGainMapPhotoSupported` and `setGainMapPhotoEnabled` to capture gain map photos (an SDR JPEG plus a gain map so HDR displays show highlights brighter).
 
 ## 2.17.0
 

@@ -26,9 +26,9 @@ public final class CameraPlugin: NSObject, FlutterPlugin {
   /// cameras) and is applied to newly created cameras.
   private var zeroShutterLagRequested: Bool?
 
-  /// The HDR photo state last requested via `setHdrPhotoEnabled`, applied to cameras created
+  /// The gain map photo state last requested via `setGainMapPhotoEnabled`, applied to cameras created
   /// afterwards.
-  private var hdrPhotoRequested: Bool?
+  private var gainMapPhotoRequested: Bool?
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let instance = CameraPlugin(
@@ -314,8 +314,8 @@ extension CameraPlugin: CameraApi {
       if let zeroShutterLagRequested = zeroShutterLagRequested {
         newCamera.setZeroShutterLagEnabled(zeroShutterLagRequested)
       }
-      if let hdrPhotoRequested = hdrPhotoRequested {
-        newCamera.setHdrPhotoEnabled(hdrPhotoRequested)
+      if let gainMapPhotoRequested = gainMapPhotoRequested {
+        newCamera.setGainMapPhotoEnabled(gainMapPhotoRequested)
       }
 
       ensureToRunOnMainQueue { [weak self] in
@@ -639,16 +639,18 @@ extension CameraPlugin: CameraApi {
     }
   }
 
-  func isHdrPhotoSupported(completion: @escaping (Result<Bool, any Error>) -> Void) {
+  func isGainMapPhotoSupported(completion: @escaping (Result<Bool, any Error>) -> Void) {
     captureSessionQueue.async { [weak self] in
-      completion(.success(self?.camera?.isHdrPhotoSupported() ?? false))
+      completion(.success(self?.camera?.isGainMapPhotoSupported() ?? false))
     }
   }
 
-  func setHdrPhotoEnabled(enabled: Bool, completion: @escaping (Result<Void, any Error>) -> Void) {
+  func setGainMapPhotoEnabled(
+    enabled: Bool, completion: @escaping (Result<Void, any Error>) -> Void
+  ) {
     captureSessionQueue.async { [weak self] in
-      self?.hdrPhotoRequested = enabled
-      self?.camera?.setHdrPhotoEnabled(enabled)
+      self?.gainMapPhotoRequested = enabled
+      self?.camera?.setGainMapPhotoEnabled(enabled)
       completion(.success(()))
     }
   }

@@ -1402,10 +1402,10 @@ class CameraApi {
     _extractReplyValueOrThrow(pigeonVar_replyList, pigeonVar_channelName, isNullValid: true);
   }
 
-  /// Returns whether the current session configuration can capture HDR photos.
-  Future<bool> isHdrPhotoSupported() async {
+  /// Returns whether the current session configuration can capture gain map photos.
+  Future<bool> isGainMapPhotoSupported() async {
     final pigeonVar_channelName =
-        'dev.flutter.pigeon.camera_avfoundation.CameraApi.isHdrPhotoSupported$pigeonVar_messageChannelSuffix';
+        'dev.flutter.pigeon.camera_avfoundation.CameraApi.isGainMapPhotoSupported$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1422,10 +1422,10 @@ class CameraApi {
     return pigeonVar_replyValue! as bool;
   }
 
-  /// Enables or disables HDR photo capture.
-  Future<void> setHdrPhotoEnabled(bool enabled) async {
+  /// Enables or disables gain map photo capture.
+  Future<void> setGainMapPhotoEnabled(bool enabled) async {
     final pigeonVar_channelName =
-        'dev.flutter.pigeon.camera_avfoundation.CameraApi.setHdrPhotoEnabled$pigeonVar_messageChannelSuffix';
+        'dev.flutter.pigeon.camera_avfoundation.CameraApi.setGainMapPhotoEnabled$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,

@@ -851,26 +851,26 @@ class CameraController extends ValueNotifier<CameraValue> {
     }
   }
 
-  /// Returns whether the camera can capture HDR photos.
+  /// Returns whether the camera can capture gain map photos.
   ///
-  /// See [CameraPlatform.isHdrPhotoSupported].
-  Future<bool> isHdrPhotoSupported() async {
-    _throwIfNotInitialized('isHdrPhotoSupported');
+  /// See [CameraPlatform.isGainMapPhotoSupported].
+  Future<bool> isGainMapPhotoSupported() async {
+    _throwIfNotInitialized('isGainMapPhotoSupported');
     try {
-      return await CameraPlatform.instance.isHdrPhotoSupported(_cameraId);
+      return await CameraPlatform.instance.isGainMapPhotoSupported(_cameraId);
     } on PlatformException catch (e) {
       throw CameraException(e.code, e.message);
     }
   }
 
-  /// Enables or disables HDR photo capture.
+  /// Enables or disables gain map photo capture.
   ///
-  /// On a camera that does not support HDR photos, photos are taken as before.
-  /// See [CameraPlatform.setHdrPhotoEnabled].
-  Future<void> setHdrPhotoEnabled(bool enabled) async {
-    _throwIfNotInitialized('setHdrPhotoEnabled');
+  /// On a camera that does not support gain map photos, photos are taken as before.
+  /// See [CameraPlatform.setGainMapPhotoEnabled].
+  Future<void> setGainMapPhotoEnabled(bool enabled) async {
+    _throwIfNotInitialized('setGainMapPhotoEnabled');
     try {
-      await CameraPlatform.instance.setHdrPhotoEnabled(_cameraId, enabled);
+      await CameraPlatform.instance.setGainMapPhotoEnabled(_cameraId, enabled);
     } on PlatformException catch (e) {
       throw CameraException(e.code, e.message);
     }

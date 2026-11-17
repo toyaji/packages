@@ -794,7 +794,7 @@ void main() {
       reset(CameraPlatform.instance);
     });
 
-    test('isHdrPhotoSupported() returns the platform value.', () async {
+    test('isGainMapPhotoSupported() returns the platform value.', () async {
       final cameraController = CameraController(
         const CameraDescription(
           name: 'cam',
@@ -806,15 +806,15 @@ void main() {
 
       await cameraController.initialize();
       when(
-        CameraPlatform.instance.isHdrPhotoSupported(mockInitializeCamera),
+        CameraPlatform.instance.isGainMapPhotoSupported(mockInitializeCamera),
       ).thenAnswer((_) async => true);
 
-      expect(await cameraController.isHdrPhotoSupported(), isTrue);
+      expect(await cameraController.isGainMapPhotoSupported(), isTrue);
 
       reset(CameraPlatform.instance);
     });
 
-    test('setHdrPhotoEnabled() calls the platform.', () async {
+    test('setGainMapPhotoEnabled() calls the platform.', () async {
       final cameraController = CameraController(
         const CameraDescription(
           name: 'cam',
@@ -825,9 +825,9 @@ void main() {
       );
 
       await cameraController.initialize();
-      await cameraController.setHdrPhotoEnabled(true);
+      await cameraController.setGainMapPhotoEnabled(true);
 
-      verify(CameraPlatform.instance.setHdrPhotoEnabled(mockInitializeCamera, true)).called(1);
+      verify(CameraPlatform.instance.setGainMapPhotoEnabled(mockInitializeCamera, true)).called(1);
 
       reset(CameraPlatform.instance);
     });
@@ -3941,16 +3941,16 @@ class MockCameraPlatform extends Mock with MockPlatformInterfaceMixin implements
           as Future<PreviewDynamicRange>;
 
   @override
-  Future<bool> isHdrPhotoSupported(int cameraId) async =>
+  Future<bool> isGainMapPhotoSupported(int cameraId) async =>
       super.noSuchMethod(
-            Invocation.method(#isHdrPhotoSupported, <Object?>[cameraId]),
+            Invocation.method(#isGainMapPhotoSupported, <Object?>[cameraId]),
             returnValue: Future<bool>.value(false),
           )
           as Future<bool>;
 
   @override
-  Future<void> setHdrPhotoEnabled(int cameraId, bool enabled) async =>
-      super.noSuchMethod(Invocation.method(#setHdrPhotoEnabled, <Object?>[cameraId, enabled]));
+  Future<void> setGainMapPhotoEnabled(int cameraId, bool enabled) async =>
+      super.noSuchMethod(Invocation.method(#setGainMapPhotoEnabled, <Object?>[cameraId, enabled]));
 
   @override
   Future<void> setZeroShutterLagEnabled(int cameraId, bool enabled) async => super.noSuchMethod(

@@ -38,10 +38,10 @@ tier within the aspect ratio, photos use the highest resolution with it, and vid
 with it through `Recorder`. The `low` tier records at SD (480p), because CameraX has no lower video
 quality.
 
-### HDR photos
+### Gain map photos
 
-`setHdrPhotoEnabled(true)` saves photos as Ultra HDR JPEGs on cameras whose `ImageCapture`
-supports `OUTPUT_FORMAT_JPEG_ULTRA_HDR`, which `isHdrPhotoSupported` reports. Other cameras keep
+`setGainMapPhotoEnabled(true)` saves photos as Ultra HDR JPEGs on cameras whose `ImageCapture`
+supports `OUTPUT_FORMAT_JPEG_ULTRA_HDR`, which `isGainMapPhotoSupported` reports. Other cameras keep
 saving JPEGs.
 
 ### HDR preview

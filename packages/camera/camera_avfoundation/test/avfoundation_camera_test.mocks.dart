@@ -411,18 +411,18 @@ class MockCameraApi extends _i1.Mock implements _i2.CameraApi {
           as _i4.Future<void>);
 
   @override
-  _i4.Future<bool> isHdrPhotoSupported() =>
+  _i4.Future<bool> isGainMapPhotoSupported() =>
       (super.noSuchMethod(
-            Invocation.method(#isHdrPhotoSupported, []),
+            Invocation.method(#isGainMapPhotoSupported, []),
             returnValue: _i4.Future<bool>.value(false),
             returnValueForMissingStub: _i4.Future<bool>.value(false),
           )
           as _i4.Future<bool>);
 
   @override
-  _i4.Future<void> setHdrPhotoEnabled(bool? enabled) =>
+  _i4.Future<void> setGainMapPhotoEnabled(bool? enabled) =>
       (super.noSuchMethod(
-            Invocation.method(#setHdrPhotoEnabled, [enabled]),
+            Invocation.method(#setGainMapPhotoEnabled, [enabled]),
             returnValue: _i4.Future<void>.value(),
             returnValueForMissingStub: _i4.Future<void>.value(),
           )
