@@ -38,6 +38,7 @@ import 'android_camera_camerax_test.mocks.dart';
   MockSpec<FocusMeteringResult>(),
   MockSpec<ImageAnalysis>(),
   MockSpec<ImageCapture>(),
+  MockSpec<ImageCaptureCapabilities>(),
   MockSpec<ImageProxy>(),
   MockSpec<Observer<CameraState>>(),
   MockSpec<PendingRecording>(),
@@ -212,6 +213,7 @@ void main() {
           ResolutionSelector? resolutionSelector,
           int? jpegQuality,
           bool? zeroShutterLagEnabled,
+          int? outputFormat,
         }) {
           final mockImageCapture = MockImageCapture();
           when(mockImageCapture.resolutionSelector).thenReturn(resolutionSelector);
@@ -580,6 +582,7 @@ void main() {
             ResolutionSelector? resolutionSelector,
             int? jpegQuality,
             bool? zeroShutterLagEnabled,
+            int? outputFormat,
           }) {
             return mockImageCapture;
           };
@@ -1124,6 +1127,7 @@ void main() {
             ResolutionSelector? resolutionSelector,
             int? jpegQuality,
             bool? zeroShutterLagEnabled,
+            int? outputFormat,
           }) {
             return mockImageCapture;
           };
@@ -1543,6 +1547,7 @@ void main() {
           ResolutionSelector? resolutionSelector,
           int? jpegQuality,
           bool? zeroShutterLagEnabled,
+          int? outputFormat,
         }) {
           return mockImageCapture;
         };
@@ -1904,6 +1909,7 @@ void main() {
           ResolutionSelector? resolutionSelector,
           int? jpegQuality,
           bool? zeroShutterLagEnabled,
+          int? outputFormat,
         }) => mockImageCapture;
     PigeonOverrides.recorder_new =
         ({int? aspectRatio, int? targetVideoEncodingBitRate, QualitySelector? qualitySelector}) =>
@@ -3227,6 +3233,7 @@ void main() {
             int? targetRotation,
             int? jpegQuality,
             bool? zeroShutterLagEnabled,
+            int? outputFormat,
           }) {
             return mockImageCapture;
           };
@@ -3445,6 +3452,7 @@ void main() {
             int? targetRotation,
             int? jpegQuality,
             bool? zeroShutterLagEnabled,
+            int? outputFormat,
           }) {
             return mockImageCapture;
           };
@@ -3704,6 +3712,7 @@ void main() {
           ResolutionSelector? resolutionSelector,
           int? jpegQuality,
           bool? zeroShutterLagEnabled,
+          int? outputFormat,
         }) {
           actualTargetRotation = targetRotation;
           actualJpegQuality = jpegQuality;
@@ -3760,6 +3769,7 @@ void main() {
             ResolutionSelector? resolutionSelector,
             int? jpegQuality,
             bool? zeroShutterLagEnabled,
+            int? outputFormat,
           }) {
             actualTargetRotation = targetRotation;
             actualJpegQuality = jpegQuality;
@@ -3809,6 +3819,7 @@ void main() {
             ResolutionSelector? resolutionSelector,
             int? jpegQuality,
             bool? zeroShutterLagEnabled,
+            int? outputFormat,
           }) {
             return mockNewImageCapture;
           };
@@ -3898,6 +3909,7 @@ void main() {
             ResolutionSelector? resolutionSelector,
             int? jpegQuality,
             bool? zeroShutterLagEnabled,
+            int? outputFormat,
           }) {
             actualZeroShutterLagEnabled = zeroShutterLagEnabled;
             return mockNewImageCapture;
@@ -3935,6 +3947,7 @@ void main() {
             ResolutionSelector? resolutionSelector,
             int? jpegQuality,
             bool? zeroShutterLagEnabled,
+            int? outputFormat,
           }) {
             imageCaptureCreated = true;
             return MockImageCapture();
@@ -3947,6 +3960,89 @@ void main() {
       expect(camera.imageCapture, same(mockImageCapture));
     },
   );
+
+  group('HDR photo', () {
+    late AndroidCameraCameraX camera;
+    late MockImageCapture mockNewImageCapture;
+    late MockCameraInfo mockCameraInfo;
+    late List<int?> outputFormats;
+
+    void setUpCamera({required List<int> supportedOutputFormats}) {
+      camera = AndroidCameraCameraX();
+      final mockProcessCameraProvider = MockProcessCameraProvider();
+      final mockDeviceOrientationManager = MockDeviceOrientationManager();
+      mockNewImageCapture = MockImageCapture();
+      mockCameraInfo = MockCameraInfo();
+      outputFormats = <int?>[];
+      camera.processCameraProvider = mockProcessCameraProvider;
+      camera.imageCapture = MockImageCapture();
+      camera.cameraInfo = mockCameraInfo;
+
+      final ImageCaptureCapabilities capabilities = MockImageCaptureCapabilities();
+      when(
+        capabilities.getSupportedOutputFormats(),
+      ).thenAnswer((_) async => supportedOutputFormats);
+      PigeonOverrides.imageCapture_getImageCaptureCapabilities = (_) async => capabilities;
+      PigeonOverrides.deviceOrientationManager_new =
+          ({required void Function(DeviceOrientationManager, String) onDeviceOrientationChanged}) {
+            when(
+              mockDeviceOrientationManager.getDefaultDisplayRotation(),
+            ).thenAnswer((_) async => Surface.rotation0);
+            return mockDeviceOrientationManager;
+          };
+      PigeonOverrides.imageCapture_new =
+          ({
+            int? targetRotation,
+            CameraXFlashMode? flashMode,
+            ResolutionSelector? resolutionSelector,
+            int? jpegQuality,
+            bool? zeroShutterLagEnabled,
+            int? outputFormat,
+          }) {
+            outputFormats.add(outputFormat);
+            return mockNewImageCapture;
+          };
+    }
+
+    test('isHdrPhotoSupported reports the Ultra HDR output format', () async {
+      setUpCamera(supportedOutputFormats: <int>[0, 1]);
+      expect(await camera.isHdrPhotoSupported(3), isTrue);
+
+      setUpCamera(supportedOutputFormats: <int>[0]);
+      expect(await camera.isHdrPhotoSupported(3), isFalse);
+    });
+
+    test('setHdrPhotoEnabled recreates ImageCapture with the Ultra HDR output format', () async {
+      setUpCamera(supportedOutputFormats: <int>[0, 1]);
+
+      await camera.setHdrPhotoEnabled(3, true);
+      await camera.setHdrPhotoEnabled(3, false);
+
+      expect(outputFormats, <int?>[
+        AndroidCameraCameraX.imageCaptureOutputFormatJpegUltraHdr,
+        null,
+      ]);
+      expect(camera.imageCapture, mockNewImageCapture);
+    });
+
+    test('setHdrPhotoEnabled keeps JPEG photos on a camera without Ultra HDR', () async {
+      setUpCamera(supportedOutputFormats: <int>[0]);
+
+      await camera.setHdrPhotoEnabled(3, true);
+
+      expect(outputFormats, isEmpty);
+    });
+
+    test('the Ultra HDR request is kept when ImageCapture is recreated', () async {
+      setUpCamera(supportedOutputFormats: <int>[0, 1]);
+      when(mockCameraInfo.isZslSupported()).thenAnswer((_) async => true);
+
+      await camera.setHdrPhotoEnabled(3, true);
+      await camera.setZeroShutterLagEnabled(3, true);
+
+      expect(outputFormats.last, AndroidCameraCameraX.imageCaptureOutputFormatJpegUltraHdr);
+    });
+  });
 
   test('setZeroShutterLagEnabled preserves a previously requested JPEG quality', () async {
     final camera = AndroidCameraCameraX();
@@ -3979,6 +4075,7 @@ void main() {
           ResolutionSelector? resolutionSelector,
           int? jpegQuality,
           bool? zeroShutterLagEnabled,
+          int? outputFormat,
         }) {
           actualJpegQuality = jpegQuality;
           return mockNewImageCapture;
@@ -4022,6 +4119,7 @@ void main() {
           ResolutionSelector? resolutionSelector,
           int? jpegQuality,
           bool? zeroShutterLagEnabled,
+          int? outputFormat,
         }) {
           actualZeroShutterLagEnabled = zeroShutterLagEnabled;
           return mockNewImageCapture;
@@ -4063,6 +4161,7 @@ void main() {
           ResolutionSelector? resolutionSelector,
           int? jpegQuality,
           bool? zeroShutterLagEnabled,
+          int? outputFormat,
         }) {
           actualZeroShutterLagEnabled = zeroShutterLagEnabled;
           final mockImageCapture = MockImageCapture();

@@ -207,6 +207,11 @@ class AndroidCameraCameraX extends CameraPlatform {
   /// set for the camera in use.
   static const String zoomStateNotSetErrorCode = 'zoomStateNotSet';
 
+  /// Constant representing the Ultra HDR output format of `ImageCapture`.
+  ///
+  /// See https://developer.android.com/reference/androidx/camera/core/ImageCapture#OUTPUT_FORMAT_JPEG_ULTRA_HDR().
+  static const int imageCaptureOutputFormatJpegUltraHdr = 1;
+
   /// The values of CameraX `AspectRatio.RATIO_4_3` and `AspectRatio.RATIO_16_9`,
   /// which `Recorder` takes as integers.
   static const int _cameraXAspectRatio4x3 = 0;
@@ -226,6 +231,9 @@ class AndroidCameraCameraX extends CameraPlatform {
   /// Whether zero-shutter-lag capture was requested via
   /// [setZeroShutterLagEnabled].
   bool _zeroShutterLagEnabled = false;
+
+  /// Whether HDR photo capture was requested via [setHdrPhotoEnabled].
+  bool _hdrPhotoEnabled = false;
 
   /// The JPEG compression quality requested via [setJpegImageQuality], if
   /// any.
@@ -492,6 +500,7 @@ class AndroidCameraCameraX extends CameraPlatform {
           .getDefaultDisplayRotation(),
       jpegQuality: _jpegQuality,
       zeroShutterLagEnabled: _zeroShutterLagEnabled,
+      outputFormat: await _imageCaptureOutputFormat(chosenCameraInfo),
     );
 
     // Configure VideoCapture and Recorder instances.
@@ -1276,8 +1285,30 @@ class AndroidCameraCameraX extends CameraPlatform {
     await _recreateImageCapture();
   }
 
+  /// Returns whether the selected camera can capture HDR photos, which CameraX
+  /// saves as Ultra HDR JPEGs (`ImageCapture.OUTPUT_FORMAT_JPEG_ULTRA_HDR`).
+  @override
+  Future<bool> isHdrPhotoSupported(int cameraId) async {
+    final CameraInfo? info = cameraInfo;
+    return info != null && await _supportsUltraHdr(info);
+  }
+
+  /// Enables or disables HDR photo capture.
+  ///
+  /// CameraX only supports setting the output format via `ImageCapture.Builder`
+  /// at construction time, so this recreates the `ImageCapture` use case. If
+  /// the selected camera does not support HDR photos, photos stay JPEG.
+  @override
+  Future<void> setHdrPhotoEnabled(int cameraId, bool enabled) async {
+    _hdrPhotoEnabled = enabled;
+    if (!await isHdrPhotoSupported(cameraId)) {
+      return;
+    }
+    await _recreateImageCapture();
+  }
+
   /// Recreates [imageCapture] from the currently requested settings
-  /// ([_jpegQuality], [_zeroShutterLagEnabled]).
+  /// ([_jpegQuality], [_zeroShutterLagEnabled], [_hdrPhotoEnabled]).
   ///
   /// CameraX only supports several `ImageCapture` settings via
   /// `ImageCapture.Builder` at construction time, so any change to one of
@@ -1303,6 +1334,27 @@ class AndroidCameraCameraX extends CameraPlatform {
       targetRotation: targetRotation,
       jpegQuality: _jpegQuality,
       zeroShutterLagEnabled: _zeroShutterLagEnabled,
+      outputFormat: await _imageCaptureOutputFormat(cameraInfo),
+    );
+  }
+
+  /// Returns the Ultra HDR output format when HDR photos were requested and
+  /// [info] supports them, or null for the default JPEG output.
+  ///
+  /// An unsupported output format fails the bind, so support is checked first.
+  Future<int?> _imageCaptureOutputFormat(CameraInfo? info) async {
+    if (!_hdrPhotoEnabled || info == null || !await _supportsUltraHdr(info)) {
+      return null;
+    }
+    return imageCaptureOutputFormatJpegUltraHdr;
+  }
+
+  Future<bool> _supportsUltraHdr(CameraInfo info) async {
+    final ImageCaptureCapabilities capabilities = await ImageCapture.getImageCaptureCapabilities(
+      info,
+    );
+    return (await capabilities.getSupportedOutputFormats()).contains(
+      imageCaptureOutputFormatJpegUltraHdr,
     );
   }
 

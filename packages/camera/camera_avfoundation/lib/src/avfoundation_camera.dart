@@ -451,6 +451,16 @@ class AVFoundationCamera extends CameraPlatform {
   }
 
   @override
+  Future<bool> isHdrPhotoSupported(int cameraId) {
+    return _hostApi.isHdrPhotoSupported();
+  }
+
+  @override
+  Future<void> setHdrPhotoEnabled(int cameraId, bool enabled) async {
+    await _hostApi.setHdrPhotoEnabled(enabled);
+  }
+
+  @override
   Future<Iterable<PreviewDynamicRange>> getSupportedPreviewDynamicRanges(
     CameraDescription description,
   ) async {

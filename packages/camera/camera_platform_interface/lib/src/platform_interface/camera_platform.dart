@@ -366,6 +366,25 @@ abstract class CameraPlatform extends PlatformInterface {
     throw UnimplementedError('setZeroShutterLagEnabled() is not implemented.');
   }
 
+  /// Returns whether the selected camera can capture HDR photos.
+  ///
+  /// An HDR photo is a photo with a gain map, which HDR displays use to show
+  /// it brighter than SDR content where the scene is bright, and which other
+  /// displays show as the SDR photo it contains. The gain map format depends
+  /// on the platform, for example Ultra HDR on Android.
+  ///
+  /// The default implementation returns `false`.
+  Future<bool> isHdrPhotoSupported(int cameraId) async => false;
+
+  /// Enables or disables HDR photo capture for still image capture.
+  ///
+  /// When enabled on a camera that [isHdrPhotoSupported], [takePicture] saves
+  /// HDR photos. On a camera that does not support them, photos are taken as
+  /// before.
+  Future<void> setHdrPhotoEnabled(int cameraId, bool enabled) {
+    throw UnimplementedError('setHdrPhotoEnabled() is not implemented.');
+  }
+
   /// Returns the preview dynamic ranges that the camera [description] supports.
   ///
   /// Call this before creating the camera, then request one of the returned

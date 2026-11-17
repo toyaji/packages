@@ -1,3 +1,7 @@
+## 2.18.0
+
+* Adds `isHdrPhotoSupported` and `setHdrPhotoEnabled` to capture HDR photos, which contain a gain map.
+
 ## 2.17.0
 
 * Adds `MediaSettings.aspectRatio` (`CameraAspectRatio`) to choose the aspect ratio of the preview, photos and recorded video, with the resolution preset as a tier within it.

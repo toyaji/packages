@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import AVFoundation
+import CoreImage
 import Flutter
 import Foundation
 
@@ -25,6 +26,12 @@ class SavePhotoDelegate: NSObject, AVCapturePhotoCaptureDelegate {
   /// The completion handler block for capture and save photo operations.
   let completionHandler: SavePhotoDelegateCompletionHandler
 
+  /// The HLG video frame at the shutter, used to add a gain map to a photo without one.
+  private let hdrFrame: CVPixelBuffer?
+
+  /// Shared by all delegates, since creating a context is expensive.
+  private static let gainMapContext = CIContext()
+
   /// The path for captured photo file.
   /// Exposed for unit tests to verify the captured photo file path.
   var filePath: String {
@@ -39,10 +46,12 @@ class SavePhotoDelegate: NSObject, AVCapturePhotoCaptureDelegate {
   init(
     path: String,
     ioQueue: DispatchQueue,
+    hdrFrame: CVPixelBuffer? = nil,
     completionHandler: @escaping SavePhotoDelegateCompletionHandler
   ) {
     self.path = path
     self.ioQueue = ioQueue
+    self.hdrFrame = hdrFrame
     self.completionHandler = completionHandler
     super.init()
   }
@@ -78,8 +87,12 @@ class SavePhotoDelegate: NSObject, AVCapturePhotoCaptureDelegate {
     didFinishProcessingPhoto photo: AVCapturePhoto,
     error: Error?
   ) {
+    let hdrFrame = self.hdrFrame
     handlePhotoCaptureResult(error: error) {
-      photo.fileDataRepresentation()
+      guard let data = photo.fileDataRepresentation() else { return nil }
+      guard let hdrFrame, !HDRPhotoGainMap.containsGainMap(data) else { return data }
+      return HDRPhotoGainMap.addingGainMap(
+        to: data, hdrFrame: hdrFrame, context: SavePhotoDelegate.gainMapContext) ?? data
     }
   }
 }

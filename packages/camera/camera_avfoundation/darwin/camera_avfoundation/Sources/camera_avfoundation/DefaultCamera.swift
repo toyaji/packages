@@ -102,6 +102,11 @@ final class DefaultCamera: NSObject, Camera {
   /// Tracks the latest pixel buffer sent from AVFoundation's sample buffer delegate callback.
   /// Used to deliver the latest pixel buffer to the flutter engine via the `copyPixelBuffer` API.
   private var latestPixelBuffer: CVPixelBuffer?
+  /// Whether HDR photos were requested via `setHdrPhotoEnabled`.
+  private var hdrPhotoEnabled = false
+  /// The latest 10-bit HLG video frame, kept while HDR photos are enabled to make a photo's gain
+  /// map. Accessed on the capture session queue.
+  private var latestHDRFrame: CVPixelBuffer?
 
   /// The layer that renders the HLG preview, if the platform view attached one.
   private weak var hdrPreviewLayer: AVCaptureVideoPreviewLayer?
@@ -1035,6 +1040,7 @@ final class DefaultCamera: NSObject, Camera {
     let savePhotoDelegate = SavePhotoDelegate(
       path: path,
       ioQueue: photoIOQueue,
+      hdrFrame: hdrPhotoEnabled && isHdrPhotoSupported() ? latestHDRFrame : nil,
       completionHandler: { [weak self] path, error in
         guard let strongSelf = self else { return }
 
@@ -1171,6 +1177,20 @@ final class DefaultCamera: NSObject, Camera {
 
   func setJpegImageQuality(_ quality: Int64) {
     self.imageQuality = quality
+  }
+
+  /// HDR photos need an HLG session: the gain map is taken from the photo when the device adds
+  /// one, or made from the HLG video frame at the shutter otherwise (iOS 18 Core Image).
+  func isHdrPhotoSupported() -> Bool {
+    guard #available(iOS 18.0, *) else { return false }
+    return previewDynamicRange == .hlg10
+  }
+
+  func setHdrPhotoEnabled(_ enabled: Bool) {
+    hdrPhotoEnabled = enabled
+    if !enabled {
+      latestHDRFrame = nil
+    }
   }
 
   func isZeroShutterLagSupported() -> Bool {
@@ -1681,6 +1701,9 @@ final class DefaultCamera: NSObject, Camera {
     if output == captureVideoOutput.avOutput {
       if let newBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
 
+        if hdrPhotoEnabled && isHdrPhotoSupported() {
+          latestHDRFrame = newBuffer
+        }
         // The HLG preview is rendered by the preview layer, not by the texture.
         if previewDynamicRange != .hlg10 {
           pixelBufferSynchronizationQueue.sync {

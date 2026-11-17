@@ -374,6 +374,15 @@ abstract class CameraApi {
   @async
   @ObjCSelector('setZeroShutterLagEnabled:')
   void setZeroShutterLagEnabled(bool enabled);
+
+  /// Returns whether the current session configuration can capture HDR photos.
+  @async
+  bool isHdrPhotoSupported();
+
+  /// Enables or disables HDR photo capture.
+  @async
+  @ObjCSelector('setHdrPhotoEnabled:')
+  void setHdrPhotoEnabled(bool enabled);
 }
 
 @EventChannelApi()

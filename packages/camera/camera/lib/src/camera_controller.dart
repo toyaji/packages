@@ -851,6 +851,31 @@ class CameraController extends ValueNotifier<CameraValue> {
     }
   }
 
+  /// Returns whether the camera can capture HDR photos.
+  ///
+  /// See [CameraPlatform.isHdrPhotoSupported].
+  Future<bool> isHdrPhotoSupported() async {
+    _throwIfNotInitialized('isHdrPhotoSupported');
+    try {
+      return await CameraPlatform.instance.isHdrPhotoSupported(_cameraId);
+    } on PlatformException catch (e) {
+      throw CameraException(e.code, e.message);
+    }
+  }
+
+  /// Enables or disables HDR photo capture.
+  ///
+  /// On a camera that does not support HDR photos, photos are taken as before.
+  /// See [CameraPlatform.setHdrPhotoEnabled].
+  Future<void> setHdrPhotoEnabled(bool enabled) async {
+    _throwIfNotInitialized('setHdrPhotoEnabled');
+    try {
+      await CameraPlatform.instance.setHdrPhotoEnabled(_cameraId, enabled);
+    } on PlatformException catch (e) {
+      throw CameraException(e.code, e.message);
+    }
+  }
+
   /// Returns the dynamic range applied to the preview.
   ///
   /// This is [PreviewDynamicRange.sdr] when the requested `previewDynamicRange`

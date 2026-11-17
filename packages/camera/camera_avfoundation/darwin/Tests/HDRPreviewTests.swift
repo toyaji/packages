@@ -220,6 +220,128 @@ final class HDRPreviewTests: XCTestCase {
     #endif
   }
 
+  // MARK: HDR photo
+
+  func testHdrPhotoIsSupportedOnlyWithAnHLGSession() throws {
+    guard #available(iOS 18.0, *) else { throw XCTSkip("Requires iOS 18.") }
+    let hlg = makeCamera(device: makeDevice(formats: [makeHLGFormat(1920, 1440)]), range: .hlg10)
+    XCTAssertTrue(hlg.isHdrPhotoSupported())
+
+    let sdr = makeCamera(device: makeDevice(formats: [makeHLGFormat(1920, 1440)]), range: .sdr)
+    XCTAssertFalse(sdr.isHdrPhotoSupported())
+  }
+
+  /// A JPEG of `width`x`height` mid gray, with an orientation property.
+  private func makeJPEG(_ width: Int, _ height: Int, orientation: CGImagePropertyOrientation)
+    -> Data
+  {
+    let context = CGContext(
+      data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+      space: CGColorSpace(name: CGColorSpace.displayP3)!,
+      bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+    context.setFillColor(gray: 0.4, alpha: 1)
+    context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+    let data = NSMutableData()
+    let destination = CGImageDestinationCreateWithData(data, "public.jpeg" as CFString, 1, nil)!
+    CGImageDestinationAddImage(
+      destination, context.makeImage()!,
+      [
+        kCGImagePropertyOrientation: orientation.rawValue,
+        kCGImagePropertyExifDictionary: [
+          kCGImagePropertyExifLensModel: "test lens"
+        ],
+      ] as CFDictionary)
+    XCTAssertTrue(CGImageDestinationFinalize(destination))
+    return data as Data
+  }
+
+  /// A 10-bit HLG frame of `width`x`height` brighter than the SDR photo.
+  private func makeHLGFrame(_ width: Int, _ height: Int) -> CVPixelBuffer {
+    var buffer: CVPixelBuffer?
+    CVPixelBufferCreate(
+      nil, width, height, kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange,
+      [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &buffer)
+    let frame = buffer!
+    CVPixelBufferLockBaseAddress(frame, [])
+    for (plane, value) in [(0, UInt16(900) << 6), (1, UInt16(512) << 6)] {
+      let base = CVPixelBufferGetBaseAddressOfPlane(frame, plane)!.assumingMemoryBound(
+        to: UInt16.self)
+      let count =
+        CVPixelBufferGetBytesPerRowOfPlane(frame, plane) / 2
+        * CVPixelBufferGetHeightOfPlane(frame, plane)
+      base.update(repeating: value, count: count)
+    }
+    CVPixelBufferUnlockBaseAddress(frame, [])
+    CVBufferSetAttachment(
+      frame, kCVImageBufferColorPrimariesKey, kCVImageBufferColorPrimaries_ITU_R_2020,
+      .shouldPropagate)
+    CVBufferSetAttachment(
+      frame, kCVImageBufferTransferFunctionKey, kCVImageBufferTransferFunction_ITU_R_2100_HLG,
+      .shouldPropagate)
+    CVBufferSetAttachment(
+      frame, kCVImageBufferYCbCrMatrixKey, kCVImageBufferYCbCrMatrix_ITU_R_2020, .shouldPropagate)
+    return frame
+  }
+
+  /// Core Image in the iOS simulator writes the ISO gain map without its metadata, which ImageIO
+  /// then refuses to add to a photo. Devices write the metadata.
+  private func skipUnlessCoreImageWritesGainMapMetadata() throws {
+    guard #available(iOS 18.0, *) else { return }
+    let sdr = CIImage(color: CIColor(red: 0.4, green: 0.4, blue: 0.4)).cropped(
+      to: CGRect(x: 0, y: 0, width: 8, height: 8))
+    let hdr = CIImage(cvPixelBuffer: makeHLGFrame(8, 8))
+    guard
+      let data = CIContext().jpegRepresentation(
+        of: sdr, colorSpace: CGColorSpace(name: CGColorSpace.displayP3)!,
+        options: [.hdrImage: hdr]),
+      let source = CGImageSourceCreateWithData(data as CFData, nil),
+      let info = CGImageSourceCopyAuxiliaryDataInfoAtIndex(
+        source, 0, kCGImageAuxiliaryDataTypeISOGainMap) as? [CFString: Any],
+      info[kCGImageAuxiliaryDataInfoMetadata] != nil
+    else {
+      throw XCTSkip("Core Image does not write ISO gain map metadata in this environment.")
+    }
+  }
+
+  func testAddingGainMapKeepsThePhotoAndItsMetadata() throws {
+    guard #available(iOS 18.0, *) else { throw XCTSkip("Requires iOS 18.") }
+    // A portrait photo keeps landscape sensor pixels; the video frame is already upright.
+    let photo = makeJPEG(400, 300, orientation: .right)
+    XCTAssertFalse(HDRPhotoGainMap.containsGainMap(photo))
+    try skipUnlessCoreImageWritesGainMapMetadata()
+
+    let result = try XCTUnwrap(
+      HDRPhotoGainMap.addingGainMap(
+        to: photo, hdrFrame: makeHLGFrame(300, 400), context: CIContext()))
+
+    XCTAssertTrue(HDRPhotoGainMap.containsGainMap(result))
+    let source = try XCTUnwrap(CGImageSourceCreateWithData(result as CFData, nil))
+    XCTAssertEqual(CGImageSourceGetType(source) as String?, "public.jpeg")
+    let properties = try XCTUnwrap(
+      CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])
+    XCTAssertEqual(properties[kCGImagePropertyPixelWidth] as? Int, 400)
+    XCTAssertEqual(properties[kCGImagePropertyPixelHeight] as? Int, 300)
+    XCTAssertEqual(properties[kCGImagePropertyOrientation] as? UInt32, 6)
+    let exif = properties[kCGImagePropertyExifDictionary] as? [CFString: Any]
+    XCTAssertEqual(exif?[kCGImagePropertyExifLensModel] as? String, "test lens")
+  }
+
+  func testAddingGainMapFailsWhenTheFrameHasAnotherAspectRatio() throws {
+    guard #available(iOS 18.0, *) else { throw XCTSkip("Requires iOS 18.") }
+    let photo = makeJPEG(400, 300, orientation: .up)
+
+    XCTAssertNil(
+      HDRPhotoGainMap.addingGainMap(
+        to: photo, hdrFrame: makeHLGFrame(320, 180), context: CIContext()))
+  }
+
+  func testInverseOrientationUndoesRotations() {
+    XCTAssertEqual(HDRPhotoGainMap.inverse(of: .right), .left)
+    XCTAssertEqual(HDRPhotoGainMap.inverse(of: .left), .right)
+    XCTAssertEqual(HDRPhotoGainMap.inverse(of: .down), .down)
+    XCTAssertEqual(HDRPhotoGainMap.inverse(of: .up), .up)
+  }
+
   // MARK: Preview view
 
   func testPreviewViewReadsTheCameraOnTheCaptureSessionQueue() {

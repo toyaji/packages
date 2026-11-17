@@ -1,3 +1,8 @@
+## 0.7.9
+
+* Supports HDR photos (`setHdrPhotoEnabled`) as Ultra HDR JPEGs (`ImageCapture.OUTPUT_FORMAT_JPEG_ULTRA_HDR`) on cameras that support them.
+* Updates minimum supported `camera_platform_interface` to 2.18.0.
+
 ## 0.7.8
 
 * Supports `MediaSettings.aspectRatio` for the preview, image capture, image analysis and video recording.
