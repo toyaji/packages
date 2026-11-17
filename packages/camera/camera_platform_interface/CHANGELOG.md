@@ -1,6 +1,7 @@
 ## 2.17.0
 
 * Adds `capturePreviewFrame` and `onPreviewFrameStarted` for previews shown in a platform view.
+* Adds `MediaSettings.aspectRatio` (`CameraAspectRatio`) to choose the aspect ratio of the preview, photos and recorded video, with the resolution preset as a tier within it.
 
 ## 2.16.0
 

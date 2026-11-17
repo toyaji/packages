@@ -64,6 +64,9 @@ enum PlatformVideoStabilizationMode { off, standard, cinematic, cinematicExtende
 // Pigeon version of PreviewDynamicRange.
 enum PlatformPreviewDynamicRange { sdr, hlg10 }
 
+// Pigeon version of CameraAspectRatio.
+enum PlatformCameraAspectRatio { ratio4x3, ratio16x9 }
+
 // Pigeon version of CameraDescription.
 class PlatformCameraDescription {
   PlatformCameraDescription({
@@ -155,6 +158,7 @@ class PlatformMediaSettings {
     required this.audioBitrate,
     required this.enableAudio,
     required this.previewDynamicRange,
+    required this.aspectRatio,
   });
 
   final PlatformResolutionPreset resolutionPreset;
@@ -163,6 +167,7 @@ class PlatformMediaSettings {
   final int? audioBitrate;
   final bool enableAudio;
   final PlatformPreviewDynamicRange previewDynamicRange;
+  final PlatformCameraAspectRatio? aspectRatio;
 }
 
 // Pigeon equivalent of CGPoint.

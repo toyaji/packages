@@ -150,9 +150,9 @@ final class DefaultCamera: NSObject, Camera {
   /// `isZeroShutterLagEnabled`, so the requested state is kept here and
   /// reapplied afterwards.
   private var zeroShutterLagRequested: Bool?
-
-  /// [Zelly patch] The photo size of the format that `applyPhotoFormat` chose, if it ran.
-  private var photoFormatMaxPhotoDimensions: CMVideoDimensions?
+  /// The formats that the aspect ratio and the resolution preset chose, best first. They have the
+  /// same size and dynamic range, so any of them can replace the active one.
+  private var aspectRatioFormats: [CaptureDeviceFormat] = []
   private var lockedCaptureOrientation = UIDeviceOrientation.unknown
   private var exposureMode = PlatformExposureMode.auto
   private var focusMode = PlatformFocusMode.auto
@@ -264,14 +264,25 @@ final class DefaultCamera: NSObject, Camera {
       mediaSettingsAVWrapper.beginConfiguration(for: videoCaptureSession)
       defer { mediaSettingsAVWrapper.commitConfiguration(for: videoCaptureSession) }
 
-      try setCaptureSessionPreset(mediaSettings.resolutionPreset)
-      let isHLGFormatApplied = applyHLGFormat()
+      let isHLGFormatApplied: Bool
+      var isAspectRatioFormatApplied = false
+      if let aspectRatio = mediaSettings.aspectRatio, applyAspectRatioFormat(aspectRatio) {
+        isAspectRatioFormatApplied = true
+        isHLGFormatApplied = previewDynamicRange == .hlg10
+        // The frame rate search below can pick another format of the same size.
+        aspectRatioFormats = []
+      } else {
+        try setCaptureSessionPreset(mediaSettings.resolutionPreset)
+        isHLGFormatApplied = applyHLGFormat()
+      }
 
       (captureDevice.flutterActiveFormat, framesPerSecond) = FormatUtils.findBestFormat(
         for: captureDevice,
         mediaSettings: mediaSettings,
         videoDimensionsConverter: videoDimensionsConverter,
-        formatFilter: isHLGFormatApplied ? FormatUtils.isHLGCapable : nil)
+        formatFilter: isHLGFormatApplied
+          ? FormatUtils.isHLGCapable
+          : (isAspectRatioFormatApplied ? { !FormatUtils.supportsHLGColorSpace($0) } : nil))
       if isHLGFormatApplied {
         FormatUtils.setHLGColorSpace(on: captureDevice)
       }
@@ -284,10 +295,9 @@ final class DefaultCamera: NSObject, Camera {
         mediaSettingsAVWrapper.setMinFrameDuration(duration, on: captureDevice)
         mediaSettingsAVWrapper.setMaxFrameDuration(duration, on: captureDevice)
       }
-    } else if let rule = DefaultCamera.photoFormatRule(for: mediaSettings.resolutionPreset),
-      applyPhotoFormat(rule: rule)
+    } else if let aspectRatio = mediaSettings.aspectRatio, applyAspectRatioFormatLocked(aspectRatio)
     {
-      // [Zelly patch] The format was chosen for stills.
+      // The format was chosen for the aspect ratio.
     } else {
       // If the frame rate is not important fall to a less restrictive
       // behavior (no configuration locking).
@@ -325,114 +335,6 @@ final class DefaultCamera: NSObject, Camera {
   @objc private func captureSessionRuntimeError(notification: NSNotification) {
     reportErrorMessage(
       "\(String(describing: notification.userInfo?[AVCaptureSessionErrorKey] as? Error))")
-  }
-
-  /// [Zelly patch] The photo shape each app photo preset asks for. `low`, `medium` and `high`
-  /// are 4:3 photos at any video size; `ultraHigh` is a 16:9 photo with 3840x2160 video, so that
-  /// 4K recording keeps its video size.
-  static func photoFormatRule(for preset: PlatformResolutionPreset) -> PhotoFormatRule? {
-    switch preset {
-    case .low, .medium, .high:
-      return PhotoFormatRule(aspectWidth: 4, aspectHeight: 3, videoDimensions: nil)
-    case .ultraHigh:
-      return PhotoFormatRule(
-        aspectWidth: 16, aspectHeight: 9,
-        videoDimensions: CMVideoDimensions(width: 3840, height: 2160))
-    default:
-      return nil
-    }
-  }
-
-  /// [Zelly patch] Ranks the formats for stills and returns the one to use.
-  ///
-  /// Candidates have video and a photo size of the rule's aspect ratio, with the photo capped at
-  /// about 12MP. With `useHLG`, only HLG formats are candidates; otherwise only formats without
-  /// the HLG color space, which are the 8-bit ones. They are ordered by photo size
-  /// (largest first), then video size (smallest first). The first candidate that
-  /// `supportsZeroShutterLag` accepts wins; otherwise the first candidate.
-  static func choosePhotoFormat(
-    among formats: [CaptureDeviceFormat], rule: PhotoFormatRule, useHLG: Bool,
-    videoDimensions: (CaptureDeviceFormat) -> CMVideoDimensions,
-    supportsZeroShutterLag: (CaptureDeviceFormat) -> Bool
-  ) -> (format: CaptureDeviceFormat, photoDimensions: CMVideoDimensions)? {
-    guard #available(iOS 16.0, *) else { return nil }
-    func pixels(_ dimensions: CMVideoDimensions) -> Int64 {
-      Int64(dimensions.width) * Int64(dimensions.height)
-    }
-    let candidates = formats.compactMap {
-      format -> (format: CaptureDeviceFormat, photoDimensions: CMVideoDimensions)? in
-      let supportsHLG = format.flutterSupportedColorSpaces.contains(.HLG_BT2020)
-      if useHLG ? !FormatUtils.isHLGCapable(format) : supportsHLG { return nil }
-      let video = videoDimensions(format)
-      if let required = rule.videoDimensions,
-        video.width != required.width || video.height != required.height
-      {
-        return nil
-      }
-      guard rule.matches(video) else { return nil }
-      let photoDimensions = format.supportedMaxPhotoDimensions
-        .filter { rule.matches($0) && pixels($0) <= PhotoFormatRule.maxPhotoPixels }
-        .max { pixels($0) < pixels($1) }
-      guard let photoDimensions else { return nil }
-      return (format, photoDimensions)
-    }
-    .sorted { lhs, rhs in
-      if pixels(lhs.photoDimensions) != pixels(rhs.photoDimensions) {
-        return pixels(lhs.photoDimensions) > pixels(rhs.photoDimensions)
-      }
-      return pixels(videoDimensions(lhs.format)) < pixels(videoDimensions(rhs.format))
-    }
-    return candidates.first { supportsZeroShutterLag($0.format) } ?? candidates.first
-  }
-
-  /// [Zelly patch] Chooses the active format for stills with `choosePhotoFormat`. HLG is used
-  /// when requested and a candidate exists; otherwise the preview stays SDR. Returns false,
-  /// leaving the session preset path to choose, when there is no candidate.
-  private func applyPhotoFormat(rule: PhotoFormatRule) -> Bool {
-    guard #available(iOS 16.0, *) else { return false }
-    let formats = captureDevice.flutterFormats
-    let supportsZeroShutterLag: (CaptureDeviceFormat) -> Bool = { [self] format in
-      guard (try? captureDevice.lockForConfiguration()) != nil else { return false }
-      captureDevice.flutterActiveFormat = format
-      captureDevice.unlockForConfiguration()
-      return capturePhotoOutput.flutterZeroShutterLagSupported
-    }
-    var useHLG = mediaSettings.previewDynamicRange == .hlg10
-    var chosen: (format: CaptureDeviceFormat, photoDimensions: CMVideoDimensions)?
-    if useHLG {
-      chosen = DefaultCamera.choosePhotoFormat(
-        among: formats, rule: rule, useHLG: true, videoDimensions: videoDimensionsConverter,
-        supportsZeroShutterLag: supportsZeroShutterLag)
-      useHLG = chosen != nil
-    }
-    if chosen == nil {
-      chosen = DefaultCamera.choosePhotoFormat(
-        among: formats, rule: rule, useHLG: false, videoDimensions: videoDimensionsConverter,
-        supportsZeroShutterLag: supportsZeroShutterLag)
-    }
-    guard let chosen else { return false }
-
-    do {
-      try captureDevice.lockForConfiguration()
-      defer { captureDevice.unlockForConfiguration() }
-      videoCaptureSession.sessionPreset = .inputPriority
-      captureDevice.flutterActiveFormat = chosen.format
-      if useHLG {
-        videoCaptureSession.automaticallyConfiguresCaptureDeviceForWideColor = false
-        FormatUtils.setHLGColorSpace(on: captureDevice)
-        previewDynamicRange = .hlg10
-      }
-    } catch {
-      reportErrorMessage("Unable to lock the camera to choose the photo format: \(error)")
-      return false
-    }
-    // Applied to the photo output by `configureMaxPhotoDimensions` when the session starts.
-    photoFormatMaxPhotoDimensions = chosen.photoDimensions
-
-    let size = videoDimensionsConverter(chosen.format)
-    previewSize = CGSize(width: CGFloat(size.width), height: CGFloat(size.height))
-    audioCaptureSession.sessionPreset = videoCaptureSession.sessionPreset
-    return true
   }
 
   // Possible values for presets are hard-coded in FLT interface having
@@ -553,6 +455,78 @@ final class DefaultCamera: NSObject, Camera {
       }
     }
     return bestFormat
+  }
+
+  /// Locks the device and applies `applyAspectRatioFormat`. Returns false if the device cannot be
+  /// locked or has no format with the aspect ratio.
+  private func applyAspectRatioFormatLocked(_ aspectRatio: PlatformCameraAspectRatio) -> Bool {
+    do {
+      try captureDevice.lockForConfiguration()
+      defer { captureDevice.unlockForConfiguration() }
+      return applyAspectRatioFormat(aspectRatio)
+    } catch {
+      reportErrorMessage("Unable to lock the camera to choose its format: \(error)")
+      return false
+    }
+  }
+
+  /// Applies the best format for the aspect ratio and the resolution preset, as an HLG format if
+  /// `hlg10` was requested and the device has one. The caller must have locked the device for
+  /// configuration. Returns false, leaving the device untouched, when the device has no format with
+  /// the aspect ratio.
+  private func applyAspectRatioFormat(_ aspectRatio: PlatformCameraAspectRatio) -> Bool {
+    func find(useHLG: Bool) -> [CaptureDeviceFormat] {
+      return FormatUtils.findAspectRatioFormats(
+        for: captureDevice, aspectRatio: aspectRatio, preset: mediaSettings.resolutionPreset,
+        useHLG: useHLG, videoDimensionsConverter: videoDimensionsConverter)
+    }
+    var useHLG = mediaSettings.previewDynamicRange == .hlg10
+    var formats = useHLG ? find(useHLG: true) : []
+    if formats.isEmpty {
+      useHLG = false
+      formats = find(useHLG: false)
+    }
+    guard let format = formats.first else { return false }
+
+    videoCaptureSession.sessionPreset = .inputPriority
+    captureDevice.flutterActiveFormat = format
+    if useHLG {
+      videoCaptureSession.automaticallyConfiguresCaptureDeviceForWideColor = false
+      FormatUtils.setHLGColorSpace(on: captureDevice)
+      previewDynamicRange = .hlg10
+    }
+    aspectRatioFormats = formats
+    let size = videoDimensionsConverter(format)
+    previewSize = CGSize(width: CGFloat(size.width), height: CGFloat(size.height))
+    audioCaptureSession.sessionPreset = videoCaptureSession.sessionPreset
+    return true
+  }
+
+  /// Switches to another format of `aspectRatioFormats` that supports zero-shutter-lag, if the
+  /// active one does not. All of them have the same size and dynamic range.
+  private func preferZeroShutterLagFormat() {
+    guard aspectRatioFormats.count > 1, !capturePhotoOutput.flutterZeroShutterLagSupported,
+      (try? captureDevice.lockForConfiguration()) != nil
+    else {
+      return
+    }
+    defer { captureDevice.unlockForConfiguration() }
+    videoCaptureSession.beginConfiguration()
+    defer { videoCaptureSession.commitConfiguration() }
+
+    let current = captureDevice.flutterActiveFormat
+    let colorSpace = captureDevice.activeColorSpace
+    for format in aspectRatioFormats where format !== current {
+      captureDevice.flutterActiveFormat = format
+      if capturePhotoOutput.flutterZeroShutterLagSupported {
+        captureDevice.activeColorSpace = colorSpace
+        configureMaxPhotoDimensions()
+        applyVideoSettings()
+        return
+      }
+    }
+    captureDevice.flutterActiveFormat = current
+    captureDevice.activeColorSpace = colorSpace
   }
 
   /// Applies an HLG format for the resolution preset if `hlg10` was requested. The preview stays
@@ -794,10 +768,6 @@ final class DefaultCamera: NSObject, Camera {
   /// resolution. Must be called whenever `captureDevice` changes, since the active format's
   /// supported dimensions can change with it.
   private func configureMaxPhotoDimensions() {
-    if #available(iOS 16.0, *), let photoFormatMaxPhotoDimensions {
-      capturePhotoOutput.maxPhotoDimensions = photoFormatMaxPhotoDimensions
-      return
-    }
     if #available(iOS 16.0, *) {
       // If the active format reports no supported dimensions, `capturePhotoOutput` keeps
       // AVFoundation's own default rather than being left unconfigured.
@@ -1260,6 +1230,9 @@ final class DefaultCamera: NSObject, Camera {
   /// `beginConfiguration`/`commitConfiguration`.
   func setZeroShutterLagEnabled(_ enabled: Bool) {
     zeroShutterLagRequested = enabled
+    if enabled {
+      preferZeroShutterLagFormat()
+    }
     applyZeroShutterLag(enabled)
   }
 
@@ -1589,18 +1562,23 @@ final class DefaultCamera: NSObject, Camera {
     }
 
     let newCaptureDevice = videoCaptureDeviceFactory(cameraName)
-    // The range is fixed for the life of the camera and the writer keeps its format and size, so
-    // an HLG recording continues only on an HLG format of the same size. Anything else is refused
-    // before the session is touched.
-    var newHLGFormat: CaptureDeviceFormat?
-    if previewDynamicRange == .hlg10 {
+    // The writer keeps its format and size, so a camera whose format was chosen (HLG or an aspect
+    // ratio) continues on a format of the same size and dynamic range. The range is fixed for the
+    // life of the camera, so an HLG recording that cannot continue is refused before the session is
+    // touched; otherwise the new camera keeps its default format, as without these settings.
+    let isHLG = previewDynamicRange == .hlg10
+    var newFormat: CaptureDeviceFormat?
+    if isHLG || mediaSettings.aspectRatio != nil {
       let size = videoDimensionsConverter(captureDevice.flutterActiveFormat)
-      newHLGFormat = newCaptureDevice.flutterFormats.first {
+      newFormat = newCaptureDevice.flutterFormats.first {
         let candidate = videoDimensionsConverter($0)
-        return FormatUtils.isHLGCapable($0) && candidate.width == size.width
-          && candidate.height == size.height
+        return candidate.width == size.width && candidate.height == size.height
+          && (isHLG ? FormatUtils.isHLGCapable($0) : !FormatUtils.supportsHLGColorSpace($0))
       }
-      guard newHLGFormat != nil, (try? newCaptureDevice.lockForConfiguration()) != nil else {
+      if newFormat != nil, (try? newCaptureDevice.lockForConfiguration()) == nil {
+        newFormat = nil
+      }
+      if isHLG && newFormat == nil {
         completion(
           .failure(
             PigeonError(
@@ -1611,11 +1589,12 @@ final class DefaultCamera: NSObject, Camera {
       }
     }
     defer {
-      if newHLGFormat != nil {
+      if newFormat != nil {
         newCaptureDevice.unlockForConfiguration()
       }
     }
     captureDevice = newCaptureDevice
+    aspectRatioFormats = []
 
     let oldConnection = captureVideoOutput.connection(with: .video)
 
@@ -1691,11 +1670,13 @@ final class DefaultCamera: NSObject, Camera {
             details: nil)))
     }
     videoCaptureSession.addConnection(newConnection)
-    if let newHLGFormat {
+    if let newFormat {
       // The new device starts with its own default format.
       videoCaptureSession.sessionPreset = .inputPriority
-      captureDevice.flutterActiveFormat = newHLGFormat
-      FormatUtils.setHLGColorSpace(on: captureDevice)
+      captureDevice.flutterActiveFormat = newFormat
+      if isHLG {
+        FormatUtils.setHLGColorSpace(on: captureDevice)
+      }
     }
     videoCaptureSession.commitConfiguration()
 
@@ -2067,21 +2048,5 @@ final class DefaultCamera: NSObject, Camera {
 
   deinit {
     motionManager.stopAccelerometerUpdates()
-  }
-}
-
-/// [Zelly patch] The photo and video shape that a photo preset asks `applyPhotoFormat` for.
-struct PhotoFormatRule {
-  /// About 12MP, so that the 24MP and 48MP modes are not used.
-  static let maxPhotoPixels: Int64 = 4224 * 3024
-
-  let aspectWidth: Int32
-  let aspectHeight: Int32
-  /// The exact video size required, if any.
-  let videoDimensions: CMVideoDimensions?
-
-  func matches(_ dimensions: CMVideoDimensions) -> Bool {
-    return Int64(dimensions.width) * Int64(aspectHeight)
-      == Int64(dimensions.height) * Int64(aspectWidth)
   }
 }

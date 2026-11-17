@@ -152,6 +152,8 @@ enum PlatformVideoStabilizationMode { off, standard, cinematic, cinematicExtende
 
 enum PlatformPreviewDynamicRange { sdr, hlg10 }
 
+enum PlatformCameraAspectRatio { ratio4x3, ratio16x9 }
+
 class PlatformCameraDescription {
   PlatformCameraDescription({
     required this.name,
@@ -434,6 +436,7 @@ class PlatformMediaSettings {
     this.audioBitrate,
     required this.enableAudio,
     required this.previewDynamicRange,
+    this.aspectRatio,
   });
 
   PlatformResolutionPreset resolutionPreset;
@@ -448,6 +451,8 @@ class PlatformMediaSettings {
 
   PlatformPreviewDynamicRange previewDynamicRange;
 
+  PlatformCameraAspectRatio? aspectRatio;
+
   List<Object?> _toList() {
     return <Object?>[
       resolutionPreset,
@@ -456,6 +461,7 @@ class PlatformMediaSettings {
       audioBitrate,
       enableAudio,
       previewDynamicRange,
+      aspectRatio,
     ];
   }
 
@@ -472,6 +478,7 @@ class PlatformMediaSettings {
       audioBitrate: result[3] as int?,
       enableAudio: result[4]! as bool,
       previewDynamicRange: result[5]! as PlatformPreviewDynamicRange,
+      aspectRatio: result[6] as PlatformCameraAspectRatio?,
     );
   }
 
@@ -489,7 +496,8 @@ class PlatformMediaSettings {
         _deepEquals(videoBitrate, other.videoBitrate) &&
         _deepEquals(audioBitrate, other.audioBitrate) &&
         _deepEquals(enableAudio, other.enableAudio) &&
-        _deepEquals(previewDynamicRange, other.previewDynamicRange);
+        _deepEquals(previewDynamicRange, other.previewDynamicRange) &&
+        _deepEquals(aspectRatio, other.aspectRatio);
   }
 
   @override
@@ -498,7 +506,7 @@ class PlatformMediaSettings {
 
   @override
   String toString() {
-    return 'PlatformMediaSettings(resolutionPreset: $resolutionPreset, framesPerSecond: $framesPerSecond, videoBitrate: $videoBitrate, audioBitrate: $audioBitrate, enableAudio: $enableAudio, previewDynamicRange: $previewDynamicRange)';
+    return 'PlatformMediaSettings(resolutionPreset: $resolutionPreset, framesPerSecond: $framesPerSecond, videoBitrate: $videoBitrate, audioBitrate: $audioBitrate, enableAudio: $enableAudio, previewDynamicRange: $previewDynamicRange, aspectRatio: $aspectRatio)';
   }
 }
 
@@ -626,26 +634,29 @@ class _PigeonCodec extends StandardMessageCodec {
     } else if (value is PlatformPreviewDynamicRange) {
       buffer.putUint8(139);
       writeValue(buffer, value.index);
-    } else if (value is PlatformCameraDescription) {
+    } else if (value is PlatformCameraAspectRatio) {
       buffer.putUint8(140);
-      writeValue(buffer, value.encode());
-    } else if (value is PlatformCameraState) {
+      writeValue(buffer, value.index);
+    } else if (value is PlatformCameraDescription) {
       buffer.putUint8(141);
       writeValue(buffer, value.encode());
-    } else if (value is PlatformCameraImageData) {
+    } else if (value is PlatformCameraState) {
       buffer.putUint8(142);
       writeValue(buffer, value.encode());
-    } else if (value is PlatformCameraImagePlane) {
+    } else if (value is PlatformCameraImageData) {
       buffer.putUint8(143);
       writeValue(buffer, value.encode());
-    } else if (value is PlatformMediaSettings) {
+    } else if (value is PlatformCameraImagePlane) {
       buffer.putUint8(144);
       writeValue(buffer, value.encode());
-    } else if (value is PlatformPoint) {
+    } else if (value is PlatformMediaSettings) {
       buffer.putUint8(145);
       writeValue(buffer, value.encode());
-    } else if (value is PlatformSize) {
+    } else if (value is PlatformPoint) {
       buffer.putUint8(146);
+      writeValue(buffer, value.encode());
+    } else if (value is PlatformSize) {
+      buffer.putUint8(147);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -689,18 +700,21 @@ class _PigeonCodec extends StandardMessageCodec {
         final value = readValue(buffer) as int?;
         return value == null ? null : PlatformPreviewDynamicRange.values[value];
       case 140:
-        return PlatformCameraDescription.decode(readValue(buffer)!);
+        final value = readValue(buffer) as int?;
+        return value == null ? null : PlatformCameraAspectRatio.values[value];
       case 141:
-        return PlatformCameraState.decode(readValue(buffer)!);
+        return PlatformCameraDescription.decode(readValue(buffer)!);
       case 142:
-        return PlatformCameraImageData.decode(readValue(buffer)!);
+        return PlatformCameraState.decode(readValue(buffer)!);
       case 143:
-        return PlatformCameraImagePlane.decode(readValue(buffer)!);
+        return PlatformCameraImageData.decode(readValue(buffer)!);
       case 144:
-        return PlatformMediaSettings.decode(readValue(buffer)!);
+        return PlatformCameraImagePlane.decode(readValue(buffer)!);
       case 145:
-        return PlatformPoint.decode(readValue(buffer)!);
+        return PlatformMediaSettings.decode(readValue(buffer)!);
       case 146:
+        return PlatformPoint.decode(readValue(buffer)!);
+      case 147:
         return PlatformSize.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);

@@ -1,3 +1,8 @@
+## 0.12.4
+
+* Adds the `aspectRatio` parameter of `CameraController` to choose the aspect ratio of the preview, photos and recorded video.
+* Updates minimum supported `camera_platform_interface` to 2.17.0, `camera_android_camerax` to 0.7.8 and `camera_avfoundation` to 0.11.3.
+
 ## 0.12.3
 
 * Adds the `previewDynamicRange` parameter of `CameraController`, `availablePreviewDynamicRanges`, and `CameraController.getPreviewDynamicRange` for an HDR (10-bit HLG) camera preview.

@@ -224,6 +224,7 @@ void main() {
           when(
             mockRecorder.getQualitySelector(),
           ).thenAnswer((_) async => qualitySelector ?? MockQualitySelector());
+          when(mockRecorder.getAspectRatio()).thenAnswer((_) async => aspectRatio ?? -1);
           return mockRecorder;
         };
     PigeonOverrides.videoCapture_withOutput =
@@ -6990,6 +6991,112 @@ void main() {
         expect(await camera.getPreviewDynamicRange(42), PreviewDynamicRange.hlg10);
         verifyNever(previews.single.setSurfaceProvider(any));
       });
+    });
+  });
+
+  group('aspect ratio', () {
+    const testCameraDescription = CameraDescription(
+      name: 'cameraName',
+      lensDirection: CameraLensDirection.back,
+      sensorOrientation: 90,
+    );
+
+    Future<AndroidCameraCameraX> createCamera(MediaSettings settings) async {
+      final camera = AndroidCameraCameraX();
+      final mockProcessCameraProvider = MockProcessCameraProvider();
+      final mockCamera = MockCamera();
+      final mockCameraInfo = MockCameraInfo();
+      setUpOverridesForTestingUseCaseConfiguration(mockProcessCameraProvider);
+      when(mockProcessCameraProvider.bindToLifecycle(any, any)).thenAnswer((_) async => mockCamera);
+      when(mockCamera.getCameraInfo()).thenAnswer((_) async => mockCameraInfo);
+      when(mockCameraInfo.getCameraState()).thenAnswer((_) async => MockLiveCameraState());
+      camera.processCameraProvider = mockProcessCameraProvider;
+      final int cameraId = await camera.createCameraWithSettings(testCameraDescription, settings);
+      await camera.initializeCamera(cameraId);
+      return camera;
+    }
+
+    Future<void> expectSelector(
+      AndroidCameraCameraX camera, {
+      required AspectRatio aspectRatio,
+      CameraSize? boundSize,
+    }) async {
+      for (final selector in <ResolutionSelector>[
+        camera.preview!.resolutionSelector!,
+        camera.imageCapture!.resolutionSelector!,
+        camera.imageAnalysis!.resolutionSelector!,
+      ]) {
+        final AspectRatioStrategy strategy = await selector.getAspectRatioStrategy();
+        expect(await strategy.getPreferredAspectRatio(), aspectRatio);
+        expect(await strategy.getFallbackRule(), AspectRatioStrategyFallbackRule.auto);
+        // Photos use the highest resolution with the aspect ratio.
+        if (boundSize == null || selector == camera.imageCapture!.resolutionSelector) {
+          expect(selector.resolutionStrategy, ResolutionStrategy.highestAvailableStrategy);
+        } else {
+          final CameraSize? size = await selector.resolutionStrategy!.getBoundSize();
+          expect(size?.width, boundSize.width);
+          expect(size?.height, boundSize.height);
+        }
+      }
+    }
+
+    test('a preset is a tier of the shorter side within 4:3', () async {
+      final AndroidCameraCameraX camera = await createCamera(
+        const MediaSettings(
+          resolutionPreset: ResolutionPreset.high,
+          aspectRatio: CameraAspectRatio.ratio4x3,
+        ),
+      );
+
+      await expectSelector(
+        camera,
+        aspectRatio: AspectRatio.ratio4To3,
+        boundSize: CameraSize.pigeon_detached(width: 960, height: 720),
+      );
+      expect(await camera.recorder!.getAspectRatio(), 0);
+    });
+
+    test('a preset is a tier of the shorter side within 16:9', () async {
+      final AndroidCameraCameraX camera = await createCamera(
+        const MediaSettings(
+          resolutionPreset: ResolutionPreset.veryHigh,
+          aspectRatio: CameraAspectRatio.ratio16x9,
+        ),
+      );
+
+      await expectSelector(
+        camera,
+        aspectRatio: AspectRatio.ratio16To9,
+        boundSize: CameraSize.pigeon_detached(width: 1920, height: 1080),
+      );
+      expect(await camera.recorder!.getAspectRatio(), 1);
+    });
+
+    test('max is the highest resolution within the aspect ratio', () async {
+      final AndroidCameraCameraX camera = await createCamera(
+        const MediaSettings(
+          resolutionPreset: ResolutionPreset.max,
+          aspectRatio: CameraAspectRatio.ratio4x3,
+        ),
+      );
+
+      await expectSelector(camera, aspectRatio: AspectRatio.ratio4To3);
+      expect(
+        camera.preview!.resolutionSelector!.allowedResolutionMode,
+        ResolutionSelectorAllowedResolutionMode.preferHigherResolutionOverCaptureRate,
+      );
+      expect(await camera.recorder!.getAspectRatio(), 0);
+    });
+
+    test('without an aspect ratio, the recorder has no aspect ratio', () async {
+      final AndroidCameraCameraX camera = await createCamera(
+        const MediaSettings(resolutionPreset: ResolutionPreset.high),
+      );
+
+      expect(await camera.recorder!.getAspectRatio(), -1);
+      final AspectRatioStrategy strategy = await camera.preview!.resolutionSelector!
+          .getAspectRatioStrategy();
+      expect(await strategy.getPreferredAspectRatio(), AspectRatio.ratio16To9);
     });
   });
 }
