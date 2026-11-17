@@ -27,6 +27,10 @@ protocol CaptureDeviceFormat: NSObjectProtocol {
   /// Corresponds to the `supportedMaxPhotoDimensions` property of `AVCaptureDevice.Format`.
   @available(iOS 16.0, *)
   var supportedMaxPhotoDimensions: [CMVideoDimensions] { get }
+
+  /// Corresponds to the `isHighPhotoQualitySupported` property of `AVCaptureDevice.Format`.
+  @available(iOS 16.0, *)
+  var isHighPhotoQualitySupported: Bool { get }
 }
 
 extension AVFrameRateRange: FrameRateRange {}

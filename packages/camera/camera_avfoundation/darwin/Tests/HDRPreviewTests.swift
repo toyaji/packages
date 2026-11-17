@@ -247,6 +247,66 @@ final class HDRPreviewTests: XCTestCase {
     XCTAssertEqual(properties[kCGImagePropertyPixelHeight] as? Int, 360)
   }
 
+  // MARK: Photo format (Zelly patch)
+
+  private func makePhotoFormat(
+    _ codecType: OSType, _ width: Int32, _ height: Int32, photo: [(Int32, Int32)],
+    hlg: Bool = false
+  ) -> MockCaptureDeviceFormat {
+    let format = makeFormat(
+      codecType, width, height, colorSpaces: hlg ? [.sRGB, .HLG_BT2020] : [.sRGB])
+    format.supportedMaxPhotoDimensions = photo.map { CMVideoDimensions(width: $0.0, height: $0.1) }
+    return format
+  }
+
+  func testPhotoPresetChoosesTheLargestPhotoWithoutThe24MPModeOrWideVideo() throws {
+    guard #available(iOS 16.0, *) else { throw XCTSkip("Requires iOS 16.") }
+    let wide = makePhotoFormat(yuv420, 1920, 1080, photo: [(1920, 1080)])
+    let fourByThree = makePhotoFormat(yuv420, 1920, 1440, photo: [(4032, 3024), (5712, 4284)])
+    let uhd = makePhotoFormat(yuv420, 3840, 2160, photo: [(8064, 6048)])
+    let device = makeDevice(formats: [wide, fourByThree, uhd])
+
+    let camera = makeCamera(device: device, preset: .high, range: .sdr)
+
+    XCTAssertTrue(activeFormat === fourByThree)
+    XCTAssertEqual(camera.previewDynamicRange, .sdr)
+  }
+
+  func testPhotoPresetWithHLGChoosesAnHLGFormat() throws {
+    guard #available(iOS 16.0, *) else { throw XCTSkip("Requires iOS 16.") }
+    let sdr = makePhotoFormat(yuv420, 1920, 1440, photo: [(4032, 3024)])
+    let hlg = makePhotoFormat(x420, 1920, 1080, photo: [(1920, 1080)], hlg: true)
+    let device = makeDevice(formats: [sdr, hlg])
+
+    let camera = makeCamera(device: device, preset: .high, range: .hlg10)
+
+    XCTAssertTrue(activeFormat === hlg)
+    XCTAssertEqual(camera.previewDynamicRange, .hlg10)
+    XCTAssertEqual(device.activeColorSpace, .HLG_BT2020)
+  }
+
+  func testPhotoPresetWithHLGStaysSDRWithoutAnHLGFormat() throws {
+    guard #available(iOS 16.0, *) else { throw XCTSkip("Requires iOS 16.") }
+    let sdr = makePhotoFormat(yuv420, 1920, 1440, photo: [(4032, 3024)])
+    let device = makeDevice(formats: [sdr])
+
+    let camera = makeCamera(device: device, preset: .high, range: .hlg10)
+
+    XCTAssertTrue(activeFormat === sdr)
+    XCTAssertEqual(camera.previewDynamicRange, .sdr)
+  }
+
+  func testVideoPresetKeepsThePresetFormatChoice() throws {
+    guard #available(iOS 16.0, *) else { throw XCTSkip("Requires iOS 16.") }
+    let fourByThree = makePhotoFormat(yuv420, 1920, 1440, photo: [(4032, 3024)])
+    let device = makeDevice(formats: [fourByThree])
+    let session = MockCaptureSession()
+
+    _ = makeCamera(device: device, preset: .veryHigh, range: .sdr, session: session)
+
+    XCTAssertEqual(session.sessionPreset, .hd1920x1080)
+  }
+
   // MARK: Video settings
 
   func testVideoSettingsAreNeverSetToAFormatThatIsNotAvailable() {
