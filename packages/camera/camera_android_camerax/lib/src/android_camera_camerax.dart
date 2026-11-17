@@ -474,14 +474,15 @@ class AndroidCameraCameraX extends CameraPlatform {
         targetFpsRange: _targetFpsRange,
         dynamicRange: DynamicRangeType.hlg10,
       );
-      _appliedPreviewDynamicRange = PreviewDynamicRange.hlg10;
       final view = PreviewView();
       _flutterSurfaceTextureId = previewViewIdentifier(view);
       await view.setImplementationMode(PreviewViewImplementationMode.performance);
       // Fills the preview box like the texture-based preview does.
       await view.setScaleType(PreviewViewScaleType.fillCenter);
       await preview!.setViewSurfaceProvider(await view.getSurfaceProvider());
+      // Set together, once the view is ready, so that no state has only one.
       previewView = view;
+      _appliedPreviewDynamicRange = PreviewDynamicRange.hlg10;
     } else {
       preview = Preview(
         resolutionSelector: _presetResolutionSelector,
@@ -597,8 +598,8 @@ class AndroidCameraCameraX extends CameraPlatform {
     // instance as bound but not paused. Video capture is bound at first use
     // instead of here.
     if (_appliedPreviewDynamicRange == PreviewDynamicRange.hlg10) {
-      // A 10-bit preview cannot be combined with ImageAnalysis, so it is bound
-      // at first image stream use instead of here.
+      // Some cameras cannot combine a 10-bit preview with ImageAnalysis, so it
+      // is bound at first image stream use instead of here.
       camera = await processCameraProvider!.bindToLifecycle(cameraSelector!, <UseCase>[
         preview!,
         imageCapture!,
@@ -649,6 +650,7 @@ class AndroidCameraCameraX extends CameraPlatform {
       await preview?.releaseSurfaceProvider();
     }
     previewView = null;
+    _appliedPreviewDynamicRange = PreviewDynamicRange.sdr;
     await livePreviewStreamState?.removeObservers();
     livePreviewStreamState = null;
     await liveCameraState?.removeObservers();

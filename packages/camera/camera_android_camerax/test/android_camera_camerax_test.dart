@@ -8,6 +8,7 @@ import 'dart:math' show Point;
 import 'package:async/async.dart';
 import 'package:camera_android_camerax/camera_android_camerax.dart';
 import 'package:camera_android_camerax/src/camerax_library.dart';
+import 'package:camera_android_camerax/src/preview_view_preview.dart';
 import 'package:camera_platform_interface/camera_platform_interface.dart';
 import 'package:flutter/services.dart' show DeviceOrientation, PlatformException, Uint8List;
 import 'package:flutter_test/flutter_test.dart';
@@ -6871,6 +6872,35 @@ void main() {
         verify(previews.single.setViewSurfaceProvider(any));
         verifyNever(previews.single.setSurfaceProvider(any));
         expect(await camera.getPreviewDynamicRange(42), PreviewDynamicRange.hlg10);
+      });
+
+      test('buildPreview shows the PreviewView with an HLG preview', () async {
+        final AndroidCameraCameraX camera = await createHlgCamera(recorderSupportsHlg: true);
+        await camera.initializeCamera(42);
+
+        expect(camera.buildPreview(42), isA<PreviewViewPreview>());
+      });
+
+      test('dispose keeps the PreviewView surface provider and reports sdr', () async {
+        final AndroidCameraCameraX camera = await createHlgCamera(recorderSupportsHlg: true);
+        await camera.initializeCamera(42);
+
+        await camera.dispose(42);
+
+        verifyNever(previews.single.releaseSurfaceProvider());
+        expect(camera.previewView, isNull);
+        expect(await camera.getPreviewDynamicRange(42), PreviewDynamicRange.sdr);
+      });
+
+      test('uses an SDR texture when HLG is requested but not supported', () async {
+        final AndroidCameraCameraX camera = await createHlgCamera(recorderSupportsHlg: false);
+        await camera.initializeCamera(42);
+
+        expect(previewRanges, <DynamicRangeType?>[null]);
+        expect(videoRanges, <DynamicRangeType?>[null]);
+        expect(camera.previewView, isNull);
+        expect(camera.buildPreview(42), isNot(isA<PreviewViewPreview>()));
+        expect(await camera.getPreviewDynamicRange(42), PreviewDynamicRange.sdr);
       });
 
       test('records in HLG when the recorder supports it', () async {
