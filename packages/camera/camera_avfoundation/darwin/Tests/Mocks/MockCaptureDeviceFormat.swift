@@ -31,9 +31,6 @@ final class MockCaptureDeviceFormat: NSObject, CaptureDeviceFormat {
   /// The photo dimensions supported by the video format.
   var supportedMaxPhotoDimensions: [CMVideoDimensions] = []
 
-  /// Whether the video format supports high photo quality.
-  var isHighPhotoQualitySupported = true
-
   override init() {
     super.init()
 

@@ -284,8 +284,8 @@ final class DefaultCamera: NSObject, Camera {
         mediaSettingsAVWrapper.setMinFrameDuration(duration, on: captureDevice)
         mediaSettingsAVWrapper.setMaxFrameDuration(duration, on: captureDevice)
       }
-    } else if DefaultCamera.photoPresets.contains(mediaSettings.resolutionPreset),
-      applyPhotoFormat()
+    } else if let rule = DefaultCamera.photoFormatRule(for: mediaSettings.resolutionPreset),
+      applyPhotoFormat(rule: rule)
     {
       // [Zelly patch] The format was chosen for stills.
     } else {
@@ -338,75 +338,90 @@ final class DefaultCamera: NSObject, Camera {
       "\(String(describing: notification.userInfo?[AVCaptureSessionErrorKey] as? Error))")
   }
 
-  // Possible values for presets are hard-coded in FLT interface having
-  // corresponding AVCaptureSessionPreset counterparts.
-  // If _resolutionPreset is not supported by camera there is
-  // fallback to lower resolution presets.
-  // If none can be selected there is error condition.
-  /// [Zelly patch] The presets that the app uses for photos, which choose their format for stills.
-  private static let photoPresets: [PlatformResolutionPreset] = [.low, .medium, .high]
+  /// [Zelly patch] The photo shape each app photo preset asks for. `low`, `medium` and `high`
+  /// are 4:3 photos at any video size; `ultraHigh` is a 16:9 photo with 3840x2160 video, so that
+  /// 4K recording keeps its video size.
+  static func photoFormatRule(for preset: PlatformResolutionPreset) -> PhotoFormatRule? {
+    switch preset {
+    case .low, .medium, .high:
+      return PhotoFormatRule(aspectWidth: 4, aspectHeight: 3, videoDimensions: nil)
+    case .ultraHigh:
+      return PhotoFormatRule(
+        aspectWidth: 16, aspectHeight: 9,
+        videoDimensions: CMVideoDimensions(width: 3840, height: 2160))
+    default:
+      return nil
+    }
+  }
 
-  /// [Zelly patch] Chooses the active format for stills, as the dev fork (a9e41e3eb) did: the
-  /// highest photo resolution other than the 24MP mode among formats with a video width of at
-  /// most 1920 (any width if none qualifies), smaller video first for equal photos. Up to three
-  /// candidates are tried for one that supports zero-shutter-lag; otherwise the first is used.
-  /// With an `hlg10` request only HLG formats are candidates, and if there is none the preview
-  /// stays SDR. Returns false, leaving the device untouched, when there is no candidate.
-  private func applyPhotoFormat() -> Bool {
+  /// [Zelly patch] Ranks the formats for stills and returns the one to use.
+  ///
+  /// Candidates have video and a photo size of the rule's aspect ratio, with the photo capped at
+  /// about 12MP. With `useHLG`, only HLG formats are candidates; otherwise only formats without
+  /// the HLG color space, which are the 8-bit ones. They are ordered by photo size
+  /// (largest first), then video size (smallest first). The first candidate that
+  /// `supportsZeroShutterLag` accepts wins; otherwise the first candidate.
+  static func choosePhotoFormat(
+    among formats: [CaptureDeviceFormat], rule: PhotoFormatRule, useHLG: Bool,
+    videoDimensions: (CaptureDeviceFormat) -> CMVideoDimensions,
+    supportsZeroShutterLag: (CaptureDeviceFormat) -> Bool
+  ) -> (format: CaptureDeviceFormat, photoDimensions: CMVideoDimensions)? {
+    guard #available(iOS 16.0, *) else { return nil }
+    func pixels(_ dimensions: CMVideoDimensions) -> Int64 {
+      Int64(dimensions.width) * Int64(dimensions.height)
+    }
+    let candidates = formats.compactMap {
+      format -> (format: CaptureDeviceFormat, photoDimensions: CMVideoDimensions)? in
+      let supportsHLG = format.flutterSupportedColorSpaces.contains(.HLG_BT2020)
+      if useHLG ? !FormatUtils.isHLGCapable(format) : supportsHLG { return nil }
+      let video = videoDimensions(format)
+      if let required = rule.videoDimensions,
+        video.width != required.width || video.height != required.height
+      {
+        return nil
+      }
+      guard rule.matches(video) else { return nil }
+      let photoDimensions = format.supportedMaxPhotoDimensions
+        .filter { rule.matches($0) && pixels($0) <= PhotoFormatRule.maxPhotoPixels }
+        .max { pixels($0) < pixels($1) }
+      guard let photoDimensions else { return nil }
+      return (format, photoDimensions)
+    }
+    .sorted { lhs, rhs in
+      if pixels(lhs.photoDimensions) != pixels(rhs.photoDimensions) {
+        return pixels(lhs.photoDimensions) > pixels(rhs.photoDimensions)
+      }
+      return pixels(videoDimensions(lhs.format)) < pixels(videoDimensions(rhs.format))
+    }
+    return candidates.first { supportsZeroShutterLag($0.format) } ?? candidates.first
+  }
+
+  /// [Zelly patch] Chooses the active format for stills with `choosePhotoFormat`. HLG is used
+  /// when requested and a candidate exists; otherwise the preview stays SDR. Returns false,
+  /// leaving the session preset path to choose, when there is no candidate.
+  private func applyPhotoFormat(rule: PhotoFormatRule) -> Bool {
     guard #available(iOS 16.0, *) else { return false }
-    let excludedPhotoDimensions = CMVideoDimensions(width: 5712, height: 4284)
-
-    func rankedCandidates(
-      among formats: [CaptureDeviceFormat], videoWidthLimit: Int32?
-    ) -> [(format: CaptureDeviceFormat, photoDimensions: CMVideoDimensions)] {
-      let candidates = formats.compactMap {
-        format -> (format: CaptureDeviceFormat, photoDimensions: CMVideoDimensions)? in
-        guard format.isHighPhotoQualitySupported else { return nil }
-        if let videoWidthLimit, videoDimensionsConverter(format).width > videoWidthLimit {
-          return nil
-        }
-        let photoDimensions = format.supportedMaxPhotoDimensions
-          .filter {
-            !($0.width == excludedPhotoDimensions.width
-              && $0.height == excludedPhotoDimensions.height)
-          }
-          .max { Int64($0.width) * Int64($0.height) < Int64($1.width) * Int64($1.height) }
-        guard let photoDimensions else { return nil }
-        return (format, photoDimensions)
-      }
-      return candidates.sorted { lhs, rhs in
-        let lhsPhoto = Int64(lhs.photoDimensions.width) * Int64(lhs.photoDimensions.height)
-        let rhsPhoto = Int64(rhs.photoDimensions.width) * Int64(rhs.photoDimensions.height)
-        if lhsPhoto != rhsPhoto { return lhsPhoto > rhsPhoto }
-        let lhsVideo = videoDimensionsConverter(lhs.format)
-        let rhsVideo = videoDimensionsConverter(rhs.format)
-        return Int64(lhsVideo.width) * Int64(lhsVideo.height)
-          < Int64(rhsVideo.width) * Int64(rhsVideo.height)
-      }
-    }
-
-    var formats = captureDevice.flutterFormats
-    let useHLG =
-      mediaSettings.previewDynamicRange == .hlg10
-      && formats.contains(where: FormatUtils.isHLGCapable)
-    if useHLG {
-      formats = formats.filter(FormatUtils.isHLGCapable)
-    }
-    var candidates = rankedCandidates(among: formats, videoWidthLimit: 1920)
-    if candidates.isEmpty {
-      candidates = rankedCandidates(among: formats, videoWidthLimit: nil)
-    }
-    guard let best = candidates.first else { return false }
-
-    var chosen = best
-    for candidate in candidates.prefix(3) {
-      guard (try? captureDevice.lockForConfiguration()) != nil else { continue }
-      captureDevice.flutterActiveFormat = candidate.format
+    let formats = captureDevice.flutterFormats
+    let supportsZeroShutterLag: (CaptureDeviceFormat) -> Bool = { [self] format in
+      guard (try? captureDevice.lockForConfiguration()) != nil else { return false }
+      captureDevice.flutterActiveFormat = format
       captureDevice.unlockForConfiguration()
-      chosen = candidate
-      if capturePhotoOutput.flutterZeroShutterLagSupported { break }
-      chosen = best
+      return capturePhotoOutput.flutterZeroShutterLagSupported
     }
+    var useHLG = mediaSettings.previewDynamicRange == .hlg10
+    var chosen: (format: CaptureDeviceFormat, photoDimensions: CMVideoDimensions)?
+    if useHLG {
+      chosen = DefaultCamera.choosePhotoFormat(
+        among: formats, rule: rule, useHLG: true, videoDimensions: videoDimensionsConverter,
+        supportsZeroShutterLag: supportsZeroShutterLag)
+      useHLG = chosen != nil
+    }
+    if chosen == nil {
+      chosen = DefaultCamera.choosePhotoFormat(
+        among: formats, rule: rule, useHLG: false, videoDimensions: videoDimensionsConverter,
+        supportsZeroShutterLag: supportsZeroShutterLag)
+    }
+    guard let chosen else { return false }
 
     do {
       try captureDevice.lockForConfiguration()
@@ -431,6 +446,11 @@ final class DefaultCamera: NSObject, Camera {
     return true
   }
 
+  // Possible values for presets are hard-coded in FLT interface having
+  // corresponding AVCaptureSessionPreset counterparts.
+  // If _resolutionPreset is not supported by camera there is
+  // fallback to lower resolution presets.
+  // If none can be selected there is error condition.
   private func setCaptureSessionPreset(
     _ resolutionPreset: PlatformResolutionPreset
   ) throws {
@@ -2025,5 +2045,21 @@ final class DefaultCamera: NSObject, Camera {
 
   deinit {
     motionManager.stopAccelerometerUpdates()
+  }
+}
+
+/// [Zelly patch] The photo and video shape that a photo preset asks `applyPhotoFormat` for.
+struct PhotoFormatRule {
+  /// About 12MP, so that the 24MP and 48MP modes are not used.
+  static let maxPhotoPixels: Int64 = 4224 * 3024
+
+  let aspectWidth: Int32
+  let aspectHeight: Int32
+  /// The exact video size required, if any.
+  let videoDimensions: CMVideoDimensions?
+
+  func matches(_ dimensions: CMVideoDimensions) -> Bool {
+    return Int64(dimensions.width) * Int64(aspectHeight)
+      == Int64(dimensions.height) * Int64(aspectWidth)
   }
 }
