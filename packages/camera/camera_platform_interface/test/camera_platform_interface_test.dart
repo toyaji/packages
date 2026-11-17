@@ -393,6 +393,20 @@ void main() {
       expect(await cameraPlatform.onPreviewFrameStarted(1).isEmpty, isTrue);
     });
 
+    test('Default implementation of isHdrPhotoSupported() should return false', () async {
+      CameraPlatform.instance = ExtendsCameraPlatform();
+      final CameraPlatform cameraPlatform = CameraPlatform.instance;
+
+      expect(await cameraPlatform.isHdrPhotoSupported(1), isFalse);
+    });
+
+    test('Default implementation of setHdrPhotoEnabled() should throw unimplemented error', () {
+      CameraPlatform.instance = ExtendsCameraPlatform();
+      final CameraPlatform cameraPlatform = CameraPlatform.instance;
+
+      expect(() => cameraPlatform.setHdrPhotoEnabled(1, true), throwsUnimplementedError);
+    });
+
     test('Default implementation of isZeroShutterLagSupported() should return false', () async {
       // Arrange
       final cameraPlatform = ExtendsCameraPlatform();

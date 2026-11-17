@@ -841,6 +841,18 @@ void main() {
 
       verify(mockApi.setZeroShutterLagEnabled(true));
     });
+
+    test('Should report HDR photo support from the host API', () async {
+      when(mockApi.isHdrPhotoSupported()).thenAnswer((_) async => true);
+
+      expect(await camera.isHdrPhotoSupported(cameraId), isTrue);
+    });
+
+    test('Should set HDR photo enabled', () async {
+      await camera.setHdrPhotoEnabled(cameraId, true);
+
+      verify(mockApi.setHdrPhotoEnabled(true));
+    });
   });
 
   group('Preview dynamic range', () {

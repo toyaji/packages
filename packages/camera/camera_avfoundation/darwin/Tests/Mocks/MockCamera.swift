@@ -29,6 +29,8 @@ final class MockCamera: NSObject, Camera {
   var setImageFileFormatStub: ((PlatformImageFileFormat) -> Void)?
   var setJpegImageQualityStub: ((Int64) -> Void)?
   var isZeroShutterLagSupportedStub: (() -> Bool)?
+  var isHdrPhotoSupportedStub: (() -> Bool)?
+  var setHdrPhotoEnabledStub: ((Bool) -> Void)?
   var setZeroShutterLagEnabledStub: ((Bool) -> Void)?
   var setExposureModeStub: ((PlatformExposureMode) -> Void)?
   var setExposureOffsetStub: ((Double) -> Void)?
@@ -163,6 +165,14 @@ final class MockCamera: NSObject, Camera {
 
   func setJpegImageQuality(_ quality: Int64) {
     setJpegImageQualityStub?(quality)
+  }
+
+  func isHdrPhotoSupported() -> Bool {
+    return isHdrPhotoSupportedStub?() ?? false
+  }
+
+  func setHdrPhotoEnabled(_ enabled: Bool) {
+    setHdrPhotoEnabledStub?(enabled)
   }
 
   func isZeroShutterLagSupported() -> Bool {

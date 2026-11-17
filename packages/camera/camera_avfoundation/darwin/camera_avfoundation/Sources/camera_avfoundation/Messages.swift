@@ -953,6 +953,10 @@ protocol CameraApi {
   func isZeroShutterLagSupported(completion: @escaping (Result<Bool, Error>) -> Void)
   /// Enables or disables zero-shutter-lag capture.
   func setZeroShutterLagEnabled(enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void)
+  /// Returns whether the current session configuration can capture HDR photos.
+  func isHdrPhotoSupported(completion: @escaping (Result<Bool, Error>) -> Void)
+  /// Enables or disables HDR photo capture.
+  func setHdrPhotoEnabled(enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void)
 }
 
 /// Generated setup class from Pigeon to handle messages through the `binaryMessenger`.
@@ -1716,6 +1720,44 @@ class CameraApiSetup {
       }
     } else {
       setZeroShutterLagEnabledChannel.setMessageHandler(nil)
+    }
+    /// Returns whether the current session configuration can capture HDR photos.
+    let isHdrPhotoSupportedChannel = FlutterBasicMessageChannel(
+      name: "dev.flutter.pigeon.camera_avfoundation.CameraApi.isHdrPhotoSupported\(channelSuffix)",
+      binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      isHdrPhotoSupportedChannel.setMessageHandler { _, reply in
+        api.isHdrPhotoSupported { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      isHdrPhotoSupportedChannel.setMessageHandler(nil)
+    }
+    /// Enables or disables HDR photo capture.
+    let setHdrPhotoEnabledChannel = FlutterBasicMessageChannel(
+      name: "dev.flutter.pigeon.camera_avfoundation.CameraApi.setHdrPhotoEnabled\(channelSuffix)",
+      binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      setHdrPhotoEnabledChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let enabledArg = args[0] as! Bool
+        api.setHdrPhotoEnabled(enabled: enabledArg) { result in
+          switch result {
+          case .success:
+            reply(wrapResult(nil))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      setHdrPhotoEnabledChannel.setMessageHandler(nil)
     }
   }
 }

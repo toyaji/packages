@@ -794,6 +794,44 @@ void main() {
       reset(CameraPlatform.instance);
     });
 
+    test('isHdrPhotoSupported() returns the platform value.', () async {
+      final cameraController = CameraController(
+        const CameraDescription(
+          name: 'cam',
+          lensDirection: CameraLensDirection.back,
+          sensorOrientation: 90,
+        ),
+        ResolutionPreset.max,
+      );
+
+      await cameraController.initialize();
+      when(
+        CameraPlatform.instance.isHdrPhotoSupported(mockInitializeCamera),
+      ).thenAnswer((_) async => true);
+
+      expect(await cameraController.isHdrPhotoSupported(), isTrue);
+
+      reset(CameraPlatform.instance);
+    });
+
+    test('setHdrPhotoEnabled() calls the platform.', () async {
+      final cameraController = CameraController(
+        const CameraDescription(
+          name: 'cam',
+          lensDirection: CameraLensDirection.back,
+          sensorOrientation: 90,
+        ),
+        ResolutionPreset.max,
+      );
+
+      await cameraController.initialize();
+      await cameraController.setHdrPhotoEnabled(true);
+
+      verify(CameraPlatform.instance.setHdrPhotoEnabled(mockInitializeCamera, true)).called(1);
+
+      reset(CameraPlatform.instance);
+    });
+
     test('isZeroShutterLagSupported() returns the platform value.', () async {
       final cameraController = CameraController(
         const CameraDescription(
@@ -3901,6 +3939,18 @@ class MockCameraPlatform extends Mock with MockPlatformInterfaceMixin implements
             returnValue: Future<PreviewDynamicRange>.value(PreviewDynamicRange.sdr),
           )
           as Future<PreviewDynamicRange>;
+
+  @override
+  Future<bool> isHdrPhotoSupported(int cameraId) async =>
+      super.noSuchMethod(
+            Invocation.method(#isHdrPhotoSupported, <Object?>[cameraId]),
+            returnValue: Future<bool>.value(false),
+          )
+          as Future<bool>;
+
+  @override
+  Future<void> setHdrPhotoEnabled(int cameraId, bool enabled) async =>
+      super.noSuchMethod(Invocation.method(#setHdrPhotoEnabled, <Object?>[cameraId, enabled]));
 
   @override
   Future<void> setZeroShutterLagEnabled(int cameraId, bool enabled) async => super.noSuchMethod(

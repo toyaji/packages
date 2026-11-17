@@ -112,6 +112,12 @@ class FakeController extends ValueNotifier<CameraValue> implements CameraControl
   Future<void> setZeroShutterLagEnabled(bool enabled) async {}
 
   @override
+  Future<bool> isHdrPhotoSupported() async => false;
+
+  @override
+  Future<void> setHdrPhotoEnabled(bool enabled) async {}
+
+  @override
   Future<PreviewDynamicRange> getPreviewDynamicRange() async => PreviewDynamicRange.sdr;
 
   @override

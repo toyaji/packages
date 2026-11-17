@@ -1,3 +1,8 @@
+## 0.12.5
+
+* Adds `CameraController.isHdrPhotoSupported` and `CameraController.setHdrPhotoEnabled` to capture HDR photos with a gain map.
+* Updates minimum supported `camera_platform_interface` to 2.18.0, `camera_android_camerax` to 0.7.9 and `camera_avfoundation` to 0.11.4.
+
 ## 0.12.4
 
 * Adds the `aspectRatio` parameter of `CameraController` to choose the aspect ratio of the preview, photos and recorded video.

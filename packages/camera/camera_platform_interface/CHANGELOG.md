@@ -1,3 +1,7 @@
+## 2.18.0
+
+* Adds `isHdrPhotoSupported` and `setHdrPhotoEnabled` to capture HDR photos, which contain a gain map.
+
 ## 2.17.0
 
 * Adds `capturePreviewFrame` and `onPreviewFrameStarted` for previews shown in a platform view.

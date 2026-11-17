@@ -26,6 +26,10 @@ public final class CameraPlugin: NSObject, FlutterPlugin {
   /// cameras) and is applied to newly created cameras.
   private var zeroShutterLagRequested: Bool?
 
+  /// The HDR photo state last requested via `setHdrPhotoEnabled`, applied to cameras created
+  /// afterwards.
+  private var hdrPhotoRequested: Bool?
+
   public static func register(with registrar: FlutterPluginRegistrar) {
     let instance = CameraPlugin(
       registry: registrar.textures(),
@@ -309,6 +313,9 @@ extension CameraPlugin: CameraApi {
       // Apply the zero-shutter-lag state requested before this camera existed.
       if let zeroShutterLagRequested = zeroShutterLagRequested {
         newCamera.setZeroShutterLagEnabled(zeroShutterLagRequested)
+      }
+      if let hdrPhotoRequested = hdrPhotoRequested {
+        newCamera.setHdrPhotoEnabled(hdrPhotoRequested)
       }
 
       ensureToRunOnMainQueue { [weak self] in
@@ -628,6 +635,20 @@ extension CameraPlugin: CameraApi {
     captureSessionQueue.async { [weak self] in
       self?.zeroShutterLagRequested = enabled
       self?.camera?.setZeroShutterLagEnabled(enabled)
+      completion(.success(()))
+    }
+  }
+
+  func isHdrPhotoSupported(completion: @escaping (Result<Bool, any Error>) -> Void) {
+    captureSessionQueue.async { [weak self] in
+      completion(.success(self?.camera?.isHdrPhotoSupported() ?? false))
+    }
+  }
+
+  func setHdrPhotoEnabled(enabled: Bool, completion: @escaping (Result<Void, any Error>) -> Void) {
+    captureSessionQueue.async { [weak self] in
+      self?.hdrPhotoRequested = enabled
+      self?.camera?.setHdrPhotoEnabled(enabled)
       completion(.success(()))
     }
   }
